@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import signal
 import sys
 import time
@@ -33,6 +34,40 @@ def persist_sample(storage: SQLiteLogger, sample: TemperatureSample, logger) -> 
         storage.log_sample(sample)
     except Exception:
         logger.exception("failed to persist sample with status=%s", sample.status)
+
+
+def run_diagnostic() -> int:
+    from config import MAX31856_CS_PIN, THERMOCOUPLE_TYPE
+
+    print("Kiln Monitor Diagnostic")
+    print(f"CS pin: {MAX31856_CS_PIN}")
+    print(f"Thermocouple type: {THERMOCOUPLE_TYPE}")
+
+    try:
+        sensor = Max31856Reader()
+    except Exception as exc:
+        print("SPI/Sensor init: FAILED")
+        print(f"Detail: {exc}")
+        return 1
+
+    try:
+        sample = sensor.read_sample()
+    except SensorReadError as exc:
+        print("SPI/Sensor init: OK")
+        print("Sensor read: FAULT")
+        print(f"Faults: {exc}")
+        return 2
+    except Exception as exc:
+        print("SPI/Sensor init: OK")
+        print("Sensor read: FAILED")
+        print(f"Detail: {exc}")
+        return 1
+
+    print("SPI/Sensor init: OK")
+    print("Sensor read: OK")
+    print(f"Temperature: {sample.temp_c:.2f} C / {sample.temp_f:.2f} F")
+    print("Faults: none")
+    return 0
 
 
 def run() -> int:
@@ -96,5 +131,18 @@ def run() -> int:
     return 0
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Kiln temperature monitor")
+    parser.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="Run a one-shot hardware check and exit.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
+    if args.diagnostic:
+        sys.exit(run_diagnostic())
     sys.exit(run())

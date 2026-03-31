@@ -56,7 +56,13 @@ Use this checklist for the first real bring-up on the Raspberry Pi after the MAX
    export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
    ```
 
-2. Start the monitor:
+2. Run the one-shot diagnostic first:
+
+   ```bash
+   python main.py --diagnostic
+   ```
+
+3. If the diagnostic looks good, start the monitor:
 
    ```bash
    python main.py

@@ -93,6 +93,22 @@ export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 python main.py
 ```
 
+## Diagnostic Mode
+
+Use diagnostic mode for a quick one-shot hardware check before running the full logger:
+
+```bash
+python main.py --diagnostic
+```
+
+This mode:
+
+- verifies the configured chip-select pin and thermocouple type
+- initializes the MAX31856
+- attempts a single sensor read
+- prints either a temperature or a fault reason
+- exits immediately with a success or failure code
+
 Console output shows:
 
 - UTC timestamp
