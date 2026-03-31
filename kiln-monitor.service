@@ -1,0 +1,18 @@
+[Unit]
+Description=Kiln Monitor
+After=local-fs.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/path/to/kiln-monitor
+Environment=PYTHONUNBUFFERED=1
+Environment=KILN_MONITOR_READ_INTERVAL_SECONDS=2
+Environment=KILN_MONITOR_MAX31856_CS_PIN=D5
+Environment=KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
+ExecStart=/path/to/kiln-monitor/.venv/bin/python /path/to/kiln-monitor/main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
