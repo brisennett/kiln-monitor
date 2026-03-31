@@ -2,6 +2,11 @@
 
 Practical Raspberry Pi kiln monitoring for a MAX31856 thermocouple front end.
 
+## Quick Start Docs
+
+- Hardware manifest: [`HARDWARE.md`](/Users/briansennett/Documents/codex/kiln-monitor/HARDWARE.md)
+- First boot checklist: [`FIRST_BOOT.md`](/Users/briansennett/Documents/codex/kiln-monitor/FIRST_BOOT.md)
+
 ## Why SQLite
 
 SQLite is the better default for this project than CSV:
