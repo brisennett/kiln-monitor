@@ -71,6 +71,16 @@ class Max31856Reader:
         if not fault:
             return
 
+        if isinstance(fault, dict):
+            fault_messages = [
+                self._format_fault_name(fault_name)
+                for fault_name, is_active in fault.items()
+                if is_active
+            ]
+            if fault_messages:
+                raise SensorReadError(", ".join(fault_messages))
+            return
+
         fault_messages = []
         if fault & 0x01:
             fault_messages.append("open circuit")
@@ -104,3 +114,17 @@ class Max31856Reader:
             return getattr(board, pin_name)
         except AttributeError as exc:
             raise ValueError(f"Unsupported board pin for MAX31856 chip select: {pin_name}") from exc
+
+    @staticmethod
+    def _format_fault_name(fault_name: str) -> str:
+        fault_labels = {
+            "cj_range": "cold junction out of range",
+            "tc_range": "thermocouple out of range",
+            "cj_high": "cold junction high",
+            "cj_low": "cold junction low",
+            "tc_high": "thermocouple high",
+            "tc_low": "thermocouple low",
+            "voltage": "over/under voltage",
+            "open_tc": "open circuit",
+        }
+        return fault_labels.get(fault_name, fault_name)
