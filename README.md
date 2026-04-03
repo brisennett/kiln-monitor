@@ -101,12 +101,18 @@ Use diagnostic mode for a quick one-shot hardware check before running the full 
 python main.py --diagnostic
 ```
 
+For repeated samples:
+
+```bash
+python main.py --diagnostic --diagnostic-samples 10 --diagnostic-delay-seconds 1
+```
+
 This mode:
 
 - verifies the configured chip-select pin and thermocouple type
 - initializes the MAX31856
-- attempts a single sensor read
-- prints either a temperature or a fault reason
+- reads several samples in a row
+- prints temperature, sample-to-sample delta, or a fault reason
 - exits immediately with a success or failure code
 
 Console output shows:

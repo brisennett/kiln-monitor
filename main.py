@@ -36,12 +36,14 @@ def persist_sample(storage: SQLiteLogger, sample: TemperatureSample, logger) -> 
         logger.exception("failed to persist sample with status=%s", sample.status)
 
 
-def run_diagnostic() -> int:
+def run_diagnostic(sample_count: int, sample_delay_seconds: float) -> int:
     from config import MAX31856_CS_PIN, THERMOCOUPLE_TYPE
 
     print("Kiln Monitor Diagnostic")
     print(f"CS pin: {MAX31856_CS_PIN}")
     print(f"Thermocouple type: {THERMOCOUPLE_TYPE}")
+    print(f"Samples: {sample_count}")
+    print(f"Sample delay: {sample_delay_seconds:.2f} seconds")
 
     try:
         sensor = Max31856Reader()
@@ -50,23 +52,40 @@ def run_diagnostic() -> int:
         print(f"Detail: {exc}")
         return 1
 
-    try:
-        sample = sensor.read_sample()
-    except SensorReadError as exc:
-        print("SPI/Sensor init: OK")
-        print("Sensor read: FAULT")
-        print(f"Faults: {exc}")
-        return 2
-    except Exception as exc:
-        print("SPI/Sensor init: OK")
-        print("Sensor read: FAILED")
-        print(f"Detail: {exc}")
-        return 1
-
     print("SPI/Sensor init: OK")
-    print("Sensor read: OK")
-    print(f"Temperature: {sample.temp_c:.2f} C / {sample.temp_f:.2f} F")
-    print("Faults: none")
+
+    previous_temp_c = None
+    fault_count = 0
+
+    for sample_number in range(1, sample_count + 1):
+        try:
+            sample = sensor.read_sample()
+            delta_text = "n/a"
+            if previous_temp_c is not None:
+                delta_c = sample.temp_c - previous_temp_c
+                delta_text = f"{delta_c:+.2f} C"
+
+            print(
+                f"Sample {sample_number:02d}: "
+                f"{sample.temp_c:7.2f} C / {sample.temp_f:7.2f} F | "
+                f"delta {delta_text} | OK"
+            )
+            previous_temp_c = sample.temp_c
+        except SensorReadError as exc:
+            fault_count += 1
+            print(f"Sample {sample_number:02d}: FAULT | {exc}")
+        except Exception as exc:
+            print(f"Sample {sample_number:02d}: FAILED | {exc}")
+            return 1
+
+        if sample_number < sample_count:
+            time.sleep(sample_delay_seconds)
+
+    if fault_count:
+        print(f"Diagnostic complete: {fault_count} fault sample(s) out of {sample_count}")
+        return 2
+
+    print("Diagnostic complete: all samples OK")
     return 0
 
 
@@ -138,11 +157,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run a one-shot hardware check and exit.",
     )
+    parser.add_argument(
+        "--diagnostic-samples",
+        type=int,
+        default=10,
+        help="Number of samples to read in diagnostic mode.",
+    )
+    parser.add_argument(
+        "--diagnostic-delay-seconds",
+        type=float,
+        default=1.0,
+        help="Delay between diagnostic samples.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     if args.diagnostic:
-        sys.exit(run_diagnostic())
+        sys.exit(run_diagnostic(args.diagnostic_samples, args.diagnostic_delay_seconds))
     sys.exit(run())

@@ -59,7 +59,7 @@ Use this checklist for the first real bring-up on the Raspberry Pi after the MAX
 2. Run the one-shot diagnostic first:
 
    ```bash
-   python main.py --diagnostic
+   python main.py --diagnostic --diagnostic-samples 10 --diagnostic-delay-seconds 1
    ```
 
 3. If the diagnostic looks good, start the monitor:
