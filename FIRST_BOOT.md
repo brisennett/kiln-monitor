@@ -54,6 +54,7 @@ Use this checklist for the first real bring-up on the Raspberry Pi after the MAX
    export KILN_MONITOR_SENSOR_MODEL=MAX31855
    export KILN_MONITOR_SPI_CS_PIN=D5
    export KILN_MONITOR_THERMOCOUPLE_TYPE=K
+   export KILN_MONITOR_MAX_SAMPLE_JUMP_C=50
    export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
    ```
 

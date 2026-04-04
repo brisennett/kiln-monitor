@@ -9,6 +9,7 @@ from config import (
     APP_LOG_PATH,
     DATABASE_PATH,
     ERROR_STREAK_WARNING_THRESHOLD,
+    MAX_SAMPLE_JUMP_C,
     SENSOR_MODEL,
     READ_INTERVAL_SECONDS,
     SPI_CS_PIN,
@@ -39,6 +40,18 @@ def persist_sample(storage: SQLiteLogger, sample: TemperatureSample, logger) -> 
         logger.exception("failed to persist sample with status=%s", sample.status)
 
 
+def reject_unrealistic_jump(sample: TemperatureSample, previous_temp_c: float | None) -> None:
+    if previous_temp_c is None or sample.temp_c is None:
+        return
+
+    delta_c = sample.temp_c - previous_temp_c
+    if abs(delta_c) > MAX_SAMPLE_JUMP_C:
+        raise SensorReadError(
+            f"unrealistic temperature jump: {delta_c:+.2f} C "
+            f"(from {previous_temp_c:.2f} C to {sample.temp_c:.2f} C)"
+        )
+
+
 def run_diagnostic(sample_count: int, sample_delay_seconds: float) -> int:
     print("Kiln Monitor Diagnostic")
     print(f"Sensor model: {SENSOR_MODEL}")
@@ -62,6 +75,7 @@ def run_diagnostic(sample_count: int, sample_delay_seconds: float) -> int:
     for sample_number in range(1, sample_count + 1):
         try:
             sample = sensor.read_sample()
+            reject_unrealistic_jump(sample, previous_temp_c)
             delta_text = "n/a"
             if previous_temp_c is not None:
                 delta_c = sample.temp_c - previous_temp_c
@@ -107,7 +121,7 @@ def run() -> int:
     signal.signal(signal.SIGTERM, handle_stop)
 
     logger.info("kiln monitor started")
-    previous_temp_f = None
+    previous_temp_c = None
     success_count = 0
     error_streak = 0
 
@@ -117,17 +131,21 @@ def run() -> int:
 
             try:
                 sample = sensor.read_sample()
+                reject_unrealistic_jump(sample, previous_temp_c)
                 persist_sample(storage, sample, logger)
                 error_streak = 0
                 success_count += 1
 
                 if success_count % STATUS_EVERY_N_SAMPLES == 0:
+                    previous_temp_f = None
+                    if previous_temp_c is not None:
+                        previous_temp_f = (previous_temp_c * 9.0 / 5.0) + 32.0
                     trend = format_trend(sample.temp_f, previous_temp_f)
                     print(
                         f"{sample.timestamp.isoformat()} | "
                         f"{sample.temp_c:7.2f} C | {sample.temp_f:7.2f} F | {trend}"
                     )
-                previous_temp_f = sample.temp_f
+                previous_temp_c = sample.temp_c
             except SensorReadError as exc:
                 error_streak += 1
                 error_sample = build_error_sample(str(exc))

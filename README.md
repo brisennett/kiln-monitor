@@ -114,6 +114,7 @@ export KILN_MONITOR_READ_INTERVAL_SECONDS=2
 export KILN_MONITOR_SENSOR_MODEL=MAX31855
 export KILN_MONITOR_SPI_CS_PIN=D5
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
+export KILN_MONITOR_MAX_SAMPLE_JUMP_C=50
 export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 python main.py
 ```
@@ -197,6 +198,7 @@ sudo systemctl status kiln-monitor
 - Sensor faults do not stop the process.
 - Faults are logged into SQLite with `status=ERROR`.
 - The monitor keeps retrying on the next interval.
+- Single-sample jumps larger than `KILN_MONITOR_MAX_SAMPLE_JUMP_C` are rejected and logged as `ERROR`.
 - Unexpected exceptions are written to the app log and the loop continues.
 - Hardware and storage settings can be changed through environment variables without editing the code on the Pi.
 

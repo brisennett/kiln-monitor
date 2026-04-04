@@ -12,6 +12,10 @@ APP_LOG_PATH = Path(os.getenv("KILN_MONITOR_LOG_PATH", LOG_DIR / "kiln_monitor.l
 # while keeping storage growth and sensor bus traffic modest.
 READ_INTERVAL_SECONDS = float(os.getenv("KILN_MONITOR_READ_INTERVAL_SECONDS", "2.0"))
 
+# Reject single-sample jumps larger than this threshold from the previous
+# accepted reading. This helps discard reconnect glitches and bad contacts.
+MAX_SAMPLE_JUMP_C = float(os.getenv("KILN_MONITOR_MAX_SAMPLE_JUMP_C", "50.0"))
+
 # Consecutive read failures before the monitor increases log severity.
 ERROR_STREAK_WARNING_THRESHOLD = int(os.getenv("KILN_MONITOR_ERROR_STREAK_WARNING_THRESHOLD", "3"))
 
