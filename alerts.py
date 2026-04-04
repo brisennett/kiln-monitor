@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,6 +19,7 @@ SEVERITY_ORDER = {
     "WARNING": 1,
     "CRITICAL": 2,
 }
+HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 @dataclass
@@ -41,6 +43,7 @@ class AlertRule:
     threshold_f: float
     severity: str
     hysteresis_f: float
+    color_hex: str
     active: bool = False
     last_triggered_at: str | None = None
 
@@ -54,6 +57,8 @@ def validate_rule(rule: AlertRule) -> None:
         raise ValueError(f"unsupported alert severity: {rule.severity}")
     if rule.hysteresis_f < 0:
         raise ValueError("alert hysteresis must be zero or greater")
+    if not HEX_COLOR_PATTERN.match(rule.color_hex):
+        raise ValueError("alert color must be a hex value like #FF6600")
 
 
 def evaluate_alert_rules(

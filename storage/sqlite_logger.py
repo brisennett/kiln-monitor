@@ -78,11 +78,13 @@ class SQLiteLogger:
                 threshold_f REAL NOT NULL,
                 severity TEXT NOT NULL,
                 hysteresis_f REAL NOT NULL DEFAULT 5.0,
+                color_hex TEXT NOT NULL DEFAULT '#38bdf8',
                 active INTEGER NOT NULL DEFAULT 0,
                 last_triggered_at TEXT
             )
             """
         )
+        self._ensure_column("alert_rules", "color_hex", "TEXT NOT NULL DEFAULT '#38bdf8'")
         self._connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
@@ -142,7 +144,7 @@ class SQLiteLogger:
     def fetch_alert_rules(self) -> list[AlertRule]:
         rows = self._connection.execute(
             """
-            SELECT id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at
+            SELECT id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, color_hex, active, last_triggered_at
             FROM alert_rules
             ORDER BY threshold_f ASC, id ASC
             """
@@ -156,8 +158,9 @@ class SQLiteLogger:
                 threshold_f=row[4],
                 severity=row[5],
                 hysteresis_f=row[6],
-                active=bool(row[7]),
-                last_triggered_at=row[8],
+                color_hex=row[7],
+                active=bool(row[8]),
+                last_triggered_at=row[9],
             )
             for row in rows
         ]

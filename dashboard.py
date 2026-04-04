@@ -32,6 +32,8 @@ PAGE_HTML = """<!doctype html>
       font-family: Inter, ui-sans-serif, system-ui, sans-serif;
       background: #0f172a;
       color: #e5e7eb;
+      --accent-color: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.18);
     }
     body {
       margin: 0;
@@ -51,6 +53,8 @@ PAGE_HTML = """<!doctype html>
       margin-bottom: 16px;
       font-weight: 700;
       background: #334155;
+      border: 1px solid var(--accent-color);
+      box-shadow: inset 0 0 0 1px var(--accent-soft);
     }
     .status-ok {
       background: #065f46;
@@ -66,9 +70,10 @@ PAGE_HTML = """<!doctype html>
     }
     .card {
       background: #111827;
-      border: 1px solid #1f2937;
+      border: 1px solid var(--accent-soft);
       border-radius: 16px;
       padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
     }
     .label {
       color: #9ca3af;
@@ -84,7 +89,7 @@ PAGE_HTML = """<!doctype html>
     }
     .chart-panel {
       background: #111827;
-      border: 1px solid #1f2937;
+      border: 1px solid var(--accent-soft);
       border-radius: 16px;
       padding: 16px;
     }
@@ -125,7 +130,7 @@ PAGE_HTML = """<!doctype html>
     }
     .rules-panel {
       background: #111827;
-      border: 1px solid #1f2937;
+      border: 1px solid var(--accent-soft);
       border-radius: 16px;
       padding: 16px;
       margin-top: 20px;
@@ -190,6 +195,19 @@ PAGE_HTML = """<!doctype html>
     .error-text {
       color: #fca5a5;
       min-height: 1.2em;
+    }
+    .color-input {
+      height: 46px;
+      padding: 6px;
+    }
+    .color-swatch {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      margin-right: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      vertical-align: middle;
     }
   </style>
 </head>
@@ -287,6 +305,10 @@ PAGE_HTML = """<!doctype html>
               <option value="false">Disabled</option>
             </select>
           </div>
+          <div>
+            <label for="ruleColor">Accent Color</label>
+            <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
+          </div>
         </div>
         <div class="rule-actions">
           <button type="submit" id="ruleSubmit">Add Rule</button>
@@ -334,6 +356,7 @@ PAGE_HTML = """<!doctype html>
     let hoverX = null;
     let smoothingEnabled = true;
     let editingRuleId = null;
+    let currentAccentColor = "#38bdf8";
     let chartState = {
       points: [],
       plotPoints: [],
@@ -365,8 +388,23 @@ PAGE_HTML = """<!doctype html>
       document.getElementById("ruleSeverity").value = "WARNING";
       document.getElementById("ruleEnabled").value = "true";
       document.getElementById("ruleHysteresis").value = "5";
+      document.getElementById("ruleColor").value = "#38bdf8";
       ruleSubmit.textContent = "Add Rule";
       ruleError.textContent = "";
+    }
+
+    function hexToSoftRgba(hexColor, alpha) {
+      const hex = hexColor.replace("#", "");
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function applyAccentColor(hexColor) {
+      currentAccentColor = hexColor || "#38bdf8";
+      document.documentElement.style.setProperty("--accent-color", currentAccentColor);
+      document.documentElement.style.setProperty("--accent-soft", hexToSoftRgba(currentAccentColor, 0.22));
     }
 
     function resizeCanvas() {
@@ -551,7 +589,7 @@ PAGE_HTML = """<!doctype html>
       }
 
       let segmentOpen = false;
-      ctx.strokeStyle = "#38bdf8";
+      ctx.strokeStyle = currentAccentColor;
       ctx.lineWidth = 2;
       ctx.beginPath();
 
@@ -620,6 +658,7 @@ PAGE_HTML = """<!doctype html>
       if (!payload.latest_sample) {
         banner.textContent = "No samples logged yet";
         banner.className = "status-banner";
+        applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : "#38bdf8");
         latestTemp.textContent = "--";
         lastUpdate.textContent = "--";
         sampleAge.textContent = "--";
@@ -630,6 +669,7 @@ PAGE_HTML = """<!doctype html>
 
       const latest = payload.latest_sample;
       const isOk = latest.status === "OK";
+      applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : "#38bdf8");
       banner.textContent = isOk ? "Sensor OK" : `Sensor ERROR: ${latest.detail || "fault sample logged"}`;
       banner.className = `status-banner ${isOk ? "status-ok" : "status-error"}`;
       latestTemp.textContent = latest.temp_f === null ? "--" : `${latest.temp_f.toFixed(1)} F / ${latest.temp_c.toFixed(1)} C`;
@@ -657,7 +697,7 @@ PAGE_HTML = """<!doctype html>
       rules.forEach((rule) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${rule.name}<div class="subtle">reset gap ${rule.hysteresis_f.toFixed(1)} F</div></td>
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${rule.hysteresis_f.toFixed(1)} F</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
           <td>${rule.threshold_f.toFixed(1)} F</td>
           <td>${rule.severity}</td>
@@ -687,6 +727,7 @@ PAGE_HTML = """<!doctype html>
           document.getElementById("ruleSeverity").value = rule.severity;
           document.getElementById("ruleHysteresis").value = rule.hysteresis_f;
           document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
+          document.getElementById("ruleColor").value = rule.color_hex;
           ruleSubmit.textContent = "Save Rule";
           ruleError.textContent = "";
         });
@@ -745,6 +786,7 @@ PAGE_HTML = """<!doctype html>
         severity: document.getElementById("ruleSeverity").value,
         hysteresis_f: Number(document.getElementById("ruleHysteresis").value),
         enabled: document.getElementById("ruleEnabled").value === "true",
+        color_hex: document.getElementById("ruleColor").value,
       };
 
       const path = editingRuleId === null
@@ -782,6 +824,7 @@ PAGE_HTML = """<!doctype html>
 
     window.addEventListener("resize", refreshHistory);
     resetRuleForm();
+    applyAccentColor("#38bdf8");
     refreshAll();
     setInterval(refreshAll, 5000);
   </script>
@@ -848,6 +891,12 @@ def open_readwrite_connection() -> sqlite3.Connection:
         )
         """
     )
+    columns = connection.execute("PRAGMA table_info(alert_rules)").fetchall()
+    existing_names = {column["name"] for column in columns}
+    if "color_hex" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN color_hex TEXT NOT NULL DEFAULT '#38bdf8'"
+        )
     connection.commit()
     return connection
 
@@ -861,6 +910,7 @@ def fetch_dashboard_status() -> dict:
             "latest_sample": None,
             "latest_fault": None,
             "latest_alert": None,
+            "active_alert_rule": None,
         }
 
     try:
@@ -894,6 +944,30 @@ def fetch_dashboard_status() -> dict:
                 LIMIT 1
                 """
             ).fetchone()
+        active_alert_rule = None
+        if table_exists(connection, "alert_rules"):
+            select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at"
+            if table_has_column(connection, "alert_rules", "color_hex"):
+                select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, color_hex, active, last_triggered_at"
+            active_rows = connection.execute(
+                f"""
+                SELECT {select_fields}
+                FROM alert_rules
+                WHERE enabled = 1 AND active = 1
+                ORDER BY
+                    CASE severity
+                        WHEN 'CRITICAL' THEN 3
+                        WHEN 'WARNING' THEN 2
+                        WHEN 'INFO' THEN 1
+                        ELSE 0
+                    END DESC,
+                    threshold_f DESC,
+                    id ASC
+                LIMIT 1
+                """
+            ).fetchone()
+            if active_rows is not None:
+                active_alert_rule = alert_rule_row_to_payload(active_rows)
         total_rows = connection.execute("SELECT COUNT(*) FROM temperature_log").fetchone()[0]
     finally:
         connection.close()
@@ -904,6 +978,7 @@ def fetch_dashboard_status() -> dict:
         "latest_sample": row_to_payload(latest_sample),
         "latest_fault": row_to_payload(latest_fault),
         "latest_alert": row_to_payload(latest_alert),
+        "active_alert_rule": active_alert_rule,
     }
 
 
@@ -951,9 +1026,15 @@ def fetch_alert_rules() -> dict:
         return {"rules": []}
 
     try:
+        select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at"
+        if table_has_column(connection, "alert_rules", "color_hex"):
+            select_fields = (
+                "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, "
+                "color_hex, active, last_triggered_at"
+            )
         rows = connection.execute(
-            """
-            SELECT id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at
+            f"""
+            SELECT {select_fields}
             FROM alert_rules
             ORDER BY threshold_f ASC, id ASC
             """
@@ -971,6 +1052,7 @@ def fetch_alert_rules() -> dict:
                 "threshold_f": row["threshold_f"],
                 "severity": row["severity"],
                 "hysteresis_f": row["hysteresis_f"],
+                "color_hex": row["color_hex"],
                 "active": bool(row["active"]),
                 "last_triggered_at": row["last_triggered_at"],
             }
@@ -988,6 +1070,7 @@ def parse_alert_rule_payload(payload: dict) -> AlertRule:
         threshold_f=float(payload.get("threshold_f")),
         severity=str(payload.get("severity", "")).strip().upper(),
         hysteresis_f=float(payload.get("hysteresis_f", 0.0)),
+        color_hex=str(payload.get("color_hex", "#38bdf8")).strip(),
         active=False,
         last_triggered_at=None,
     )
@@ -1008,9 +1091,10 @@ def create_alert_rule(payload: dict) -> dict:
                 threshold_f,
                 severity,
                 hysteresis_f,
+                color_hex,
                 active,
                 last_triggered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)
             """,
             (
                 rule.name,
@@ -1019,6 +1103,7 @@ def create_alert_rule(payload: dict) -> dict:
                 rule.threshold_f,
                 rule.severity,
                 rule.hysteresis_f,
+                rule.color_hex,
             ),
         )
         connection.commit()
@@ -1045,7 +1130,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
         connection.execute(
             """
             UPDATE alert_rules
-            SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, severity = ?, hysteresis_f = ?,
+            SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, severity = ?, hysteresis_f = ?, color_hex = ?,
                 active = CASE WHEN ? = 1 THEN active ELSE 0 END
             WHERE id = ?
             """,
@@ -1056,6 +1141,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
                 rule.threshold_f,
                 rule.severity,
                 rule.hysteresis_f,
+                rule.color_hex,
                 int(rule.enabled),
                 rule_id,
             ),
@@ -1098,6 +1184,22 @@ def row_to_payload(row: sqlite3.Row | None) -> dict | None:
     if "rule_name" in row.keys():
         payload["rule_name"] = row["rule_name"]
     payload["sample_age"] = format_sample_age(row["timestamp_utc"])
+    return payload
+
+
+def alert_rule_row_to_payload(row: sqlite3.Row) -> dict:
+    payload = {
+        "id": row["id"],
+        "name": row["name"],
+        "enabled": bool(row["enabled"]),
+        "rule_type": row["rule_type"],
+        "threshold_f": row["threshold_f"],
+        "severity": row["severity"],
+        "hysteresis_f": row["hysteresis_f"],
+        "active": bool(row["active"]),
+        "last_triggered_at": row["last_triggered_at"],
+        "color_hex": row["color_hex"] if "color_hex" in row.keys() else "#38bdf8",
+    }
     return payload
 
 

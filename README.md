@@ -191,6 +191,8 @@ Supported rule types:
 
 Each rule can be named, enabled or disabled, assigned a severity, and given a reset gap (`hysteresis`) so it does not chatter when temperature hovers near the threshold.
 
+Each alert rule can also define its own accent color. When an alert rule is active, the dashboard uses the highest-priority active rule color for the trend line and card accents.
+
 Alert events are written to SQLite and shown in both `python status.py` and the local dashboard.
 
 ## Retention And Archive
