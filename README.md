@@ -26,6 +26,8 @@ kiln-monitor/
   dashboard.py
   config.py
   requirements.txt
+  kiln-monitor.service
+  kiln-dashboard.service
   sensor/
   storage/
   utils/
@@ -177,6 +179,8 @@ The page auto-refreshes every 5 seconds and includes `1h`, `24h`, and `7d` trend
 
 Verified on Pi host `kiln-spy` with the MAX31855 board: the service starts at boot, logs live samples, and survives a reboot.
 
+### Logger Service
+
 Example `systemd` unit:
 
 ```ini
@@ -210,6 +214,41 @@ sudo systemctl enable kiln-monitor
 sudo systemctl start kiln-monitor
 sudo systemctl status kiln-monitor
 ```
+
+### Dashboard Service
+
+Example `systemd` unit:
+
+```ini
+[Unit]
+Description=Kiln Monitor Dashboard
+After=network-online.target kiln-monitor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=brisennett
+WorkingDirectory=/home/brisennett/kiln-monitor
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/brisennett/kiln-monitor/.venv/bin/python /home/brisennett/kiln-monitor/dashboard.py --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Install it as:
+
+```bash
+sudo cp kiln-dashboard.service /etc/systemd/system/kiln-dashboard.service
+sudo systemctl daemon-reload
+sudo systemctl enable kiln-dashboard
+sudo systemctl start kiln-dashboard
+sudo systemctl status kiln-dashboard --no-pager
+```
+
+Then open `http://<pi-hostname-or-ip>:8080/` from another device on the LAN.
 
 ## Logging Interval Guidance
 

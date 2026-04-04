@@ -1,0 +1,16 @@
+[Unit]
+Description=Kiln Monitor Dashboard
+After=network-online.target kiln-monitor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=brisennett
+WorkingDirectory=/home/brisennett/kiln-monitor
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/brisennett/kiln-monitor/.venv/bin/python /home/brisennett/kiln-monitor/dashboard.py --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
