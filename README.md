@@ -22,6 +22,7 @@ CSV is still useful for exports, but SQLite is a more reliable primary log forma
 ```text
 kiln-monitor/
   main.py
+  status.py
   config.py
   requirements.txt
   sensor/
@@ -150,6 +151,14 @@ Console output shows:
 
 Application logs are written to `logs/kiln_monitor.log`.
 Temperature samples are stored in `data/kiln_monitor.db`.
+
+## Status Command
+
+Print the latest sample, sample age, last fault, and total row count from SQLite:
+
+```bash
+python status.py
+```
 
 ## Running As A Service
 
