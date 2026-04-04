@@ -136,3 +136,5 @@ If you get only fault messages:
 3. Confirm the service restarts automatically.
 4. Confirm new rows continue appearing in SQLite after reboot.
 5. Only then move on to enclosure mounting and field wiring near the kiln.
+
+Verified on Pi host `kiln-spy`: `kiln-monitor.service` starts automatically after reboot and continues logging MAX31855 temperature samples.

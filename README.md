@@ -153,6 +153,8 @@ Temperature samples are stored in `data/kiln_monitor.db`.
 
 ## Running As A Service
 
+Verified on Pi host `kiln-spy` with the MAX31855 board: the service starts at boot, logs live samples, and survives a reboot.
+
 Example `systemd` unit:
 
 ```ini
