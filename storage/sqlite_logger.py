@@ -32,6 +32,18 @@ class SQLiteLogger:
             )
             """
         )
+        self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temperature_log_timestamp_utc
+            ON temperature_log(timestamp_utc)
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_temperature_log_status
+            ON temperature_log(status)
+            """
+        )
         self._connection.commit()
 
     def log_sample(self, sample: TemperatureSample) -> None:

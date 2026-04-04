@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Kiln Monitor Retention Daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+Unit=kiln-retention.service
+
+[Install]
+WantedBy=timers.target

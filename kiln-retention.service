@@ -1,0 +1,12 @@
+[Unit]
+Description=Kiln Monitor Retention
+After=kiln-monitor.service
+
+[Service]
+Type=oneshot
+User=brisennett
+WorkingDirectory=/home/brisennett/kiln-monitor
+Environment=PYTHONUNBUFFERED=1
+Environment=KILN_MONITOR_RETENTION_SQLITE_DAYS=30
+Environment=KILN_MONITOR_RETENTION_ARCHIVE_DAYS=183
+ExecStart=/home/brisennett/kiln-monitor/.venv/bin/python /home/brisennett/kiln-monitor/retention.py

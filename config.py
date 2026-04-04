@@ -4,6 +4,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
+ARCHIVE_DIR = Path(os.getenv("KILN_MONITOR_ARCHIVE_DIR", DATA_DIR / "archive"))
 LOG_DIR = BASE_DIR / "logs"
 DATABASE_PATH = Path(os.getenv("KILN_MONITOR_DB_PATH", DATA_DIR / "kiln_monitor.db"))
 APP_LOG_PATH = Path(os.getenv("KILN_MONITOR_LOG_PATH", LOG_DIR / "kiln_monitor.log"))
@@ -41,3 +42,7 @@ SQLITE_SYNCHRONOUS_MODE = os.getenv("KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE", "FUL
 
 # Print status to the console every N successful samples.
 STATUS_EVERY_N_SAMPLES = int(os.getenv("KILN_MONITOR_STATUS_EVERY_N_SAMPLES", "1"))
+
+# Retention policy for raw SQLite rows and compressed CSV archives.
+RETENTION_SQLITE_DAYS = int(os.getenv("KILN_MONITOR_RETENTION_SQLITE_DAYS", "30"))
+RETENTION_ARCHIVE_DAYS = int(os.getenv("KILN_MONITOR_RETENTION_ARCHIVE_DAYS", "183"))

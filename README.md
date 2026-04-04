@@ -24,10 +24,13 @@ kiln-monitor/
   main.py
   status.py
   dashboard.py
+  retention.py
   config.py
   requirements.txt
   kiln-monitor.service
   kiln-dashboard.service
+  kiln-retention.service
+  kiln-retention.timer
   sensor/
   storage/
   utils/
@@ -175,6 +178,25 @@ Then open `http://<pi-hostname-or-ip>:8080/` from another device on the same net
 
 The page auto-refreshes every 5 seconds and includes `1h`, `24h`, and `7d` trend views.
 
+## Retention And Archive
+
+Archive rows older than 30 days into compressed CSV files and prune archive files after 183 days:
+
+```bash
+python retention.py
+```
+
+Defaults can be changed with:
+
+```bash
+export KILN_MONITOR_RETENTION_SQLITE_DAYS=30
+export KILN_MONITOR_RETENTION_ARCHIVE_DAYS=183
+export KILN_MONITOR_ARCHIVE_DIR=/home/brisennett/kiln-monitor/data/archive
+python retention.py
+```
+
+Archive files are written to `data/archive/` as `CSV.gz`.
+
 ## Running As A Service
 
 Verified on Pi host `kiln-spy` with the MAX31855 board: the service starts at boot, logs live samples, and survives a reboot.
@@ -249,6 +271,26 @@ sudo systemctl status kiln-dashboard --no-pager
 ```
 
 Then open `http://<pi-hostname-or-ip>:8080/` from another device on the LAN.
+
+### Retention Service
+
+Install the daily retention timer as:
+
+```bash
+sudo cp kiln-retention.service /etc/systemd/system/kiln-retention.service
+sudo cp kiln-retention.timer /etc/systemd/system/kiln-retention.timer
+sudo systemctl daemon-reload
+sudo systemctl enable kiln-retention.timer
+sudo systemctl start kiln-retention.timer
+sudo systemctl list-timers kiln-retention.timer --no-pager
+```
+
+Run one retention pass immediately with:
+
+```bash
+sudo systemctl start kiln-retention.service
+sudo systemctl status kiln-retention.service --no-pager
+```
 
 ## Logging Interval Guidance
 
