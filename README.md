@@ -162,14 +162,14 @@ After=local-fs.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/path/to/kiln-monitor
+User=brisennett
+WorkingDirectory=/home/brisennett/kiln-monitor
 Environment=PYTHONUNBUFFERED=1
 Environment=KILN_MONITOR_READ_INTERVAL_SECONDS=2
 Environment=KILN_MONITOR_SENSOR_MODEL=MAX31855
 Environment=KILN_MONITOR_SPI_CS_PIN=D5
 Environment=KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
-ExecStart=/path/to/kiln-monitor/.venv/bin/python /path/to/kiln-monitor/main.py
+ExecStart=/home/brisennett/kiln-monitor/.venv/bin/python /home/brisennett/kiln-monitor/main.py
 Restart=always
 RestartSec=5
 
