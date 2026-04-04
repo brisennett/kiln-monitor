@@ -19,6 +19,18 @@ def format_sample_age(timestamp_utc: str) -> str:
     return f"{int(age_seconds // 3600)}h {int((age_seconds % 3600) // 60)}m"
 
 
+def table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+    row = connection.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+        """,
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
 def print_status() -> int:
     if not DATABASE_PATH.exists():
         print(f"Database not found: {DATABASE_PATH}")
@@ -48,6 +60,17 @@ def print_status() -> int:
             LIMIT 1
             """
         ).fetchone()
+
+        latest_alert = None
+        if table_exists(connection, "alert_log"):
+            latest_alert = connection.execute(
+                """
+                SELECT id, timestamp_utc, level, kind, detail
+                FROM alert_log
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
     except sqlite3.Error as exc:
         print(f"Failed to read status database: {exc}")
         return 1
@@ -89,6 +112,21 @@ def print_status() -> int:
             f"time_utc={fault_timestamp_utc}, "
             f"age={fault_age}, "
             f"detail={fault_detail}"
+        )
+
+    if latest_alert is None:
+        print("Last alert: none recorded")
+    else:
+        alert_id, alert_timestamp_utc, alert_level, alert_kind, alert_detail = latest_alert
+        alert_age = format_sample_age(alert_timestamp_utc)
+        print(
+            "Last alert: "
+            f"id={alert_id}, "
+            f"time_utc={alert_timestamp_utc}, "
+            f"age={alert_age}, "
+            f"level={alert_level}, "
+            f"kind={alert_kind}, "
+            f"detail={alert_detail}"
         )
 
     return 0

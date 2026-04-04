@@ -5,6 +5,7 @@ import signal
 import sys
 import time
 
+from alerts import evaluate_alert_rules
 from config import (
     APP_LOG_PATH,
     DATABASE_PATH,
@@ -38,6 +39,14 @@ def persist_sample(storage: SQLiteLogger, sample: TemperatureSample, logger) -> 
         storage.log_sample(sample)
     except Exception:
         logger.exception("failed to persist sample with status=%s", sample.status)
+
+
+def persist_alerts(storage: SQLiteLogger, alerts, logger) -> None:
+    for alert in alerts:
+        try:
+            storage.log_alert(alert)
+        except Exception:
+            logger.exception("failed to persist alert with level=%s kind=%s", alert.level, alert.kind)
 
 
 def reject_unrealistic_jump(sample: TemperatureSample, previous_temp_c: float | None) -> None:
@@ -133,6 +142,24 @@ def run() -> int:
                 sample = sensor.read_sample()
                 reject_unrealistic_jump(sample, previous_temp_c)
                 persist_sample(storage, sample, logger)
+                alert_rules = storage.fetch_alert_rules()
+                alerts, updated_rules = evaluate_alert_rules(sample, alert_rules)
+                persist_alerts(storage, alerts, logger)
+                for original_rule, updated_rule in zip(alert_rules, updated_rules):
+                    if (
+                        updated_rule.id is not None
+                        and (
+                            original_rule.active != updated_rule.active
+                            or original_rule.last_triggered_at != updated_rule.last_triggered_at
+                        )
+                    ):
+                        storage.update_alert_rule_state(updated_rule)
+                for alert in alerts:
+                    if alert.level == "CRITICAL":
+                        logger.warning("alert %s: %s", alert.kind, alert.detail)
+                    else:
+                        logger.info("alert %s: %s", alert.kind, alert.detail)
+                    print(f"{alert.timestamp_utc} | ALERT {alert.level} | {alert.detail}")
                 error_streak = 0
                 success_count += 1
 

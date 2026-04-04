@@ -24,6 +24,7 @@ kiln-monitor/
   main.py
   status.py
   dashboard.py
+  alerts.py
   retention.py
   config.py
   requirements.txt
@@ -160,7 +161,7 @@ Temperature samples are stored in `data/kiln_monitor.db`.
 
 ## Status Command
 
-Print the latest sample, sample age, last fault, and total row count from SQLite:
+Print the latest sample, sample age, last fault, last alert, and total row count from SQLite:
 
 ```bash
 python status.py
@@ -177,6 +178,20 @@ python dashboard.py --host 0.0.0.0 --port 8080
 Then open `http://<pi-hostname-or-ip>:8080/` from another device on the same network.
 
 The page auto-refreshes every 5 seconds and includes `1h`, `24h`, and `7d` trend views.
+
+## Alerts
+
+Alert rules are configured in the dashboard UI and stored in SQLite.
+
+Supported rule types:
+
+- `TARGET_REACHED` for milestone temperatures such as `200 F`, `500 F`, or `1000 F`
+- `ABOVE_HIGH` for critical high-temperature safety alerts
+- `BELOW_LOW` for critical low-temperature safety alerts
+
+Each rule can be named, enabled or disabled, assigned a severity, and given a reset gap (`hysteresis`) so it does not chatter when temperature hovers near the threshold.
+
+Alert events are written to SQLite and shown in both `python status.py` and the local dashboard.
 
 ## Retention And Archive
 
