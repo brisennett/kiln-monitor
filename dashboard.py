@@ -97,6 +97,7 @@ PAGE_HTML = """<!doctype html>
     .range-buttons {
       display: flex;
       gap: 8px;
+      flex-wrap: wrap;
     }
     button {
       border: 1px solid #334155;
@@ -158,6 +159,7 @@ PAGE_HTML = """<!doctype html>
           <div class="subtle" id="chartMeta">--</div>
         </div>
         <div class="range-buttons">
+          <button type="button" id="smoothToggle" class="active">Smooth</button>
           <button type="button" data-range="1h">1h</button>
           <button type="button" data-range="24h" class="active">24h</button>
           <button type="button" data-range="7d">7d</button>
@@ -179,6 +181,12 @@ PAGE_HTML = """<!doctype html>
     const canvas = document.getElementById("tempChart");
     const ctx = canvas.getContext("2d");
     let selectedRange = "24h";
+    let hoverX = null;
+    let smoothingEnabled = true;
+    let chartState = {
+      points: [],
+      plotPoints: [],
+    };
 
     function formatTimestamp(isoText) {
       if (!isoText) {
@@ -195,7 +203,107 @@ PAGE_HTML = """<!doctype html>
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     }
 
+    function drawRoundedRect(x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    function smoothPoints(points, windowSize) {
+      const smoothed = [];
+      const recentTemps = [];
+
+      points.forEach((point) => {
+        if (point.status !== "OK" || point.temp_f === null || !Number.isFinite(point.temp_f)) {
+          recentTemps.length = 0;
+          smoothed.push(point);
+          return;
+        }
+
+        recentTemps.push(point.temp_f);
+        if (recentTemps.length > windowSize) {
+          recentTemps.shift();
+        }
+
+        const averageF = recentTemps.reduce((sum, temp) => sum + temp, 0) / recentTemps.length;
+        smoothed.push({
+          ...point,
+          temp_f: averageF,
+          temp_c: (averageF - 32.0) * 5.0 / 9.0,
+        });
+      });
+
+      return smoothed;
+    }
+
+    function drawHoverOverlay() {
+      if (hoverX === null || !chartState.plotPoints.length) {
+        return;
+      }
+
+      let nearest = chartState.plotPoints[0];
+      let nearestDistance = Math.abs(nearest.x - hoverX);
+
+      chartState.plotPoints.forEach((point) => {
+        const distance = Math.abs(point.x - hoverX);
+        if (distance < nearestDistance) {
+          nearest = point;
+          nearestDistance = distance;
+        }
+      });
+
+      const boxWidth = 210;
+      const boxHeight = 58;
+      const boxX = Math.min(
+        Math.max(12, nearest.x + 12),
+        canvas.getBoundingClientRect().width - boxWidth - 12,
+      );
+      const boxY = Math.max(12, nearest.y - boxHeight - 16);
+
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(nearest.x, chartState.top);
+      ctx.lineTo(nearest.x, chartState.top + chartState.plotHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = nearest.status === "OK" ? "#38bdf8" : "#ef4444";
+      ctx.beginPath();
+      ctx.arc(nearest.x, nearest.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.96)";
+      ctx.strokeStyle = "#64748b";
+      ctx.lineWidth = 1;
+      drawRoundedRect(boxX, boxY, boxWidth, boxHeight, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "700 14px system-ui, sans-serif";
+      const valueText = nearest.status === "OK"
+        ? `${nearest.temp_f.toFixed(1)} F / ${nearest.temp_c.toFixed(1)} C`
+        : `ERROR: ${nearest.detail || "fault"}`;
+      ctx.fillText(valueText, boxX + 12, boxY + 23);
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillText(formatTimestamp(nearest.timestamp_utc), boxX + 12, boxY + 42);
+    }
+
     function drawChart(points) {
+      const displayPoints = smoothingEnabled
+        ? smoothPoints(points, 12)
+        : points;
+
       resizeCanvas();
       const width = canvas.getBoundingClientRect().width;
       const height = canvas.getBoundingClientRect().height;
@@ -208,13 +316,20 @@ PAGE_HTML = """<!doctype html>
       const plotWidth = Math.max(1, width - left - right);
       const plotHeight = Math.max(1, height - top - bottom);
 
+      chartState = {
+        points,
+        plotPoints: [],
+        top,
+        plotHeight,
+      };
+
       ctx.fillStyle = "#0f172a";
       ctx.fillRect(0, 0, width, height);
       ctx.strokeStyle = "#334155";
       ctx.lineWidth = 1;
       ctx.strokeRect(left, top, plotWidth, plotHeight);
 
-      if (!points.length) {
+      if (!displayPoints.length) {
         ctx.fillStyle = "#9ca3af";
         ctx.font = "14px system-ui, sans-serif";
         ctx.fillText("No samples in this window yet.", left + 12, top + 28);
@@ -222,16 +337,21 @@ PAGE_HTML = """<!doctype html>
         return;
       }
 
-      const times = points.map((point) => new Date(point.timestamp_utc).getTime());
-      const validTemps = points
+      const times = displayPoints.map((point) => new Date(point.timestamp_utc).getTime());
+      const validTemps = displayPoints
         .map((point) => point.temp_f)
         .filter((temp) => temp !== null && Number.isFinite(temp));
       const minTime = Math.min(...times);
       const maxTime = Math.max(...times);
       const minTemp = validTemps.length ? Math.min(...validTemps) : 0;
       const maxTemp = validTemps.length ? Math.max(...validTemps) : 1;
-      const paddedMinTemp = minTemp === maxTemp ? minTemp - 1 : minTemp - Math.max(1, (maxTemp - minTemp) * 0.08);
-      const paddedMaxTemp = minTemp === maxTemp ? maxTemp + 1 : maxTemp + Math.max(1, (maxTemp - minTemp) * 0.08);
+      let paddedMinTemp = minTemp === maxTemp ? minTemp - 1 : minTemp - Math.max(1, (maxTemp - minTemp) * 0.08);
+      let paddedMaxTemp = minTemp === maxTemp ? maxTemp + 1 : maxTemp + Math.max(1, (maxTemp - minTemp) * 0.08);
+      if ((paddedMaxTemp - paddedMinTemp) < 20.0) {
+        const midpoint = (paddedMinTemp + paddedMaxTemp) / 2;
+        paddedMinTemp = midpoint - (20.0 / 2);
+        paddedMaxTemp = midpoint + (20.0 / 2);
+      }
       const timeSpan = Math.max(1, maxTime - minTime);
       const tempSpan = Math.max(1, paddedMaxTemp - paddedMinTemp);
 
@@ -261,14 +381,26 @@ PAGE_HTML = """<!doctype html>
       ctx.lineWidth = 2;
       ctx.beginPath();
 
-      points.forEach((point) => {
+      displayPoints.forEach((point) => {
         const pointTime = new Date(point.timestamp_utc).getTime();
         if (point.temp_f === null || !Number.isFinite(point.temp_f) || point.status !== "OK") {
           segmentOpen = false;
+          if (point.status === "ERROR") {
+            chartState.plotPoints.push({
+              ...point,
+              x: xFor(pointTime),
+              y: top + plotHeight - 5,
+            });
+          }
           return;
         }
         const x = xFor(pointTime);
         const y = yFor(point.temp_f);
+        chartState.plotPoints.push({
+          ...point,
+          x,
+          y,
+        });
         if (!segmentOpen) {
           ctx.moveTo(x, y);
           segmentOpen = true;
@@ -278,7 +410,7 @@ PAGE_HTML = """<!doctype html>
       });
       ctx.stroke();
 
-      points.forEach((point) => {
+      displayPoints.forEach((point) => {
         if (point.status !== "ERROR") {
           return;
         }
@@ -290,16 +422,19 @@ PAGE_HTML = """<!doctype html>
       });
 
       ctx.fillStyle = "#9ca3af";
-      ctx.fillText(formatTimestamp(points[0].timestamp_utc), left, height - 12);
-      const endLabel = formatTimestamp(points[points.length - 1].timestamp_utc);
+      ctx.fillText(formatTimestamp(displayPoints[0].timestamp_utc), left, height - 12);
+      const endLabel = formatTimestamp(displayPoints[displayPoints.length - 1].timestamp_utc);
       const endWidth = ctx.measureText(endLabel).width;
       ctx.fillText(endLabel, left + plotWidth - endWidth, height - 12);
 
       if (validTemps.length) {
-        chartMeta.textContent = `${points.length} samples, ${minTemp.toFixed(1)} F to ${maxTemp.toFixed(1)} F`;
+        const modeLabel = smoothingEnabled ? "smoothed" : "raw";
+        chartMeta.textContent = `${displayPoints.length} samples, ${minTemp.toFixed(1)} F to ${maxTemp.toFixed(1)} F, ${modeLabel}`;
       } else {
-        chartMeta.textContent = `${points.length} samples, no valid temperatures in range`;
+        chartMeta.textContent = `${displayPoints.length} samples, no valid temperatures in range`;
       }
+
+      drawHoverOverlay();
     }
 
     async function refreshStatus() {
@@ -353,6 +488,23 @@ PAGE_HTML = """<!doctype html>
         });
         await refreshHistory();
       });
+    });
+
+    document.getElementById("smoothToggle").addEventListener("click", (event) => {
+      smoothingEnabled = !smoothingEnabled;
+      event.target.classList.toggle("active", smoothingEnabled);
+      event.target.textContent = smoothingEnabled ? "Smooth" : "Raw";
+      drawChart(chartState.points);
+    });
+
+    canvas.addEventListener("mousemove", (event) => {
+      hoverX = event.clientX - canvas.getBoundingClientRect().left;
+      drawChart(chartState.points);
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      hoverX = null;
+      drawChart(chartState.points);
     });
 
     window.addEventListener("resize", refreshHistory);
