@@ -7,13 +7,13 @@ Use this checklist for the first real bring-up on the Raspberry Pi after the MAX
 1. Inspect the MAX31856 board for cold joints, solder bridges, and lifted pads.
 2. Confirm the thermocouple is Type K and the extension wire is also Type K.
 3. Confirm thermocouple polarity all the way from probe to amplifier terminals.
-4. Verify the MAX31856 wiring:
+4. Verify the MAX31855 wiring:
    - `VIN` -> `3.3V`
    - `GND` -> `GND`
-   - `SCK` -> `SCLK`
-   - `SDO` -> `MISO`
-   - `SDI` -> `MOSI`
-   - `CS` -> `GPIO5` unless you intentionally chose another pin
+   - `CLK` / `SCK` -> Pi `SCLK` / `GPIO11` / physical pin `23`
+   - `SO` / `SDO` -> Pi `MISO` / `GPIO9` / physical pin `21`
+   - `CS` -> Pi `GPIO5` / physical pin `29` unless you intentionally chose another pin
+   - Do not connect Pi `MOSI` for MAX31855
 5. Keep thermocouple and logic wiring physically away from mains wiring.
 6. Do the first test on the bench, not connected to kiln power switching hardware.
 
@@ -51,7 +51,8 @@ Use this checklist for the first real bring-up on the Raspberry Pi after the MAX
 
    ```bash
    export KILN_MONITOR_READ_INTERVAL_SECONDS=2
-   export KILN_MONITOR_MAX31856_CS_PIN=D5
+   export KILN_MONITOR_SENSOR_MODEL=MAX31855
+   export KILN_MONITOR_SPI_CS_PIN=D5
    export KILN_MONITOR_THERMOCOUPLE_TYPE=K
    export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
    ```

@@ -5,7 +5,8 @@ This project is a Raspberry Pi based kiln temperature monitor for an electric ki
 ## Core Components
 
 - Raspberry Pi 4
-- Adafruit MAX31856 thermocouple amplifier breakout
+- MAX31855 K-type thermocouple amplifier breakout for current testing
+- Adafruit MAX31856 thermocouple amplifier breakout as the original target board
 - Type K kiln thermocouple
 - Fiberglass-insulated Type K extension wire
 - Kingston A400 SATA SSD with USB-to-SATA adapter
@@ -19,7 +20,7 @@ Phase 1 is monitoring only. There are no relays, contactors, or kiln control out
 
 Implemented scope:
 
-- Read kiln temperature through MAX31856 over SPI
+- Read kiln temperature through MAX31855 or MAX31856 over SPI
 - Convert and store temperatures in Celsius and Fahrenheit
 - Detect and log thermocouple and cold-junction faults
 - Log samples to SQLite on the Pi
@@ -36,6 +37,20 @@ Not yet in scope:
 - Display HAT integration
 
 ## Wiring Summary
+
+## MAX31855 Wiring
+
+| MAX31855 pin | Raspberry Pi signal | BCM GPIO | Physical pin |
+| --- | --- | --- | --- |
+| `VIN` | `3.3V` | n/a | `1` |
+| `GND` | `GND` | n/a | `6` |
+| `CLK` / `SCK` | `SCLK` | `GPIO11` | `23` |
+| `SO` / `SDO` | `MISO` | `GPIO9` | `21` |
+| `CS` | chip select | `GPIO5` | `29` |
+
+MAX31855 does not use Pi `MOSI`.
+
+## MAX31856 Wiring
 
 MAX31856 breakout to Raspberry Pi:
 

@@ -15,11 +15,21 @@ READ_INTERVAL_SECONDS = float(os.getenv("KILN_MONITOR_READ_INTERVAL_SECONDS", "2
 # Consecutive read failures before the monitor increases log severity.
 ERROR_STREAK_WARNING_THRESHOLD = int(os.getenv("KILN_MONITOR_ERROR_STREAK_WARNING_THRESHOLD", "3"))
 
+# Sensor front-end model. Use MAX31855 for the replacement board or MAX31856
+# for the original thermocouple amplifier board.
+SENSOR_MODEL = os.getenv("KILN_MONITOR_SENSOR_MODEL", "MAX31855").upper()
+
 # Thermocouple configuration.
 THERMOCOUPLE_TYPE = os.getenv("KILN_MONITOR_THERMOCOUPLE_TYPE", "K").upper()
 
 # Named board pin used for MAX31856 chip select.
-MAX31856_CS_PIN = os.getenv("KILN_MONITOR_MAX31856_CS_PIN", "D5").upper()
+SPI_CS_PIN = os.getenv(
+    "KILN_MONITOR_SPI_CS_PIN",
+    os.getenv("KILN_MONITOR_MAX31856_CS_PIN", "D5"),
+).upper()
+
+# Backward-compatible alias for older service/env settings.
+MAX31856_CS_PIN = SPI_CS_PIN
 
 # SQLite durability mode. FULL is safer for an appliance-style logger where write
 # rate is low and preserving recent samples across power loss matters.

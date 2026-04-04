@@ -9,10 +9,13 @@ from config import (
     APP_LOG_PATH,
     DATABASE_PATH,
     ERROR_STREAK_WARNING_THRESHOLD,
+    SENSOR_MODEL,
     READ_INTERVAL_SECONDS,
+    SPI_CS_PIN,
     STATUS_EVERY_N_SAMPLES,
+    THERMOCOUPLE_TYPE,
 )
-from sensor.max31856_reader import Max31856Reader, SensorReadError, TemperatureSample
+from sensor import SensorReadError, TemperatureSample, build_sensor_reader
 from storage.sqlite_logger import SQLiteLogger
 from utils.runtime import format_trend, setup_app_logger
 
@@ -37,16 +40,15 @@ def persist_sample(storage: SQLiteLogger, sample: TemperatureSample, logger) -> 
 
 
 def run_diagnostic(sample_count: int, sample_delay_seconds: float) -> int:
-    from config import MAX31856_CS_PIN, THERMOCOUPLE_TYPE
-
     print("Kiln Monitor Diagnostic")
-    print(f"CS pin: {MAX31856_CS_PIN}")
+    print(f"Sensor model: {SENSOR_MODEL}")
+    print(f"CS pin: {SPI_CS_PIN}")
     print(f"Thermocouple type: {THERMOCOUPLE_TYPE}")
     print(f"Samples: {sample_count}")
     print(f"Sample delay: {sample_delay_seconds:.2f} seconds")
 
     try:
-        sensor = Max31856Reader()
+        sensor = build_sensor_reader()
     except Exception as exc:
         print("SPI/Sensor init: FAILED")
         print(f"Detail: {exc}")
@@ -92,7 +94,7 @@ def run_diagnostic(sample_count: int, sample_delay_seconds: float) -> int:
 def run() -> int:
     logger = setup_app_logger(APP_LOG_PATH)
     storage = SQLiteLogger(DATABASE_PATH)
-    sensor = Max31856Reader()
+    sensor = build_sensor_reader()
 
     should_stop = False
 

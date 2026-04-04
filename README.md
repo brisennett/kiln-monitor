@@ -1,6 +1,6 @@
 # Kiln Monitor
 
-Practical Raspberry Pi kiln monitoring for a MAX31856 thermocouple front end.
+Practical Raspberry Pi kiln monitoring for MAX31855 and MAX31856 thermocouple front ends.
 
 ## Quick Start Docs
 
@@ -66,6 +66,30 @@ kiln-monitor/
 
 ## Wiring Notes
 
+### MAX31855 Board
+
+Use this wiring for the MAX31855 K-type thermocouple board:
+
+| MAX31855 pin | Raspberry Pi signal | BCM GPIO | Physical pin |
+| --- | --- | --- | --- |
+| `VIN` | `3.3V` | n/a | `1` |
+| `GND` | `GND` | n/a | `6` |
+| `CLK` / `SCK` | `SCLK` | `GPIO11` | `23` |
+| `SO` / `SDO` | `MISO` | `GPIO9` | `21` |
+| `CS` | chip select | `GPIO5` | `29` |
+
+Do not connect Pi `MOSI` for MAX31855. That board is read-only over SPI.
+
+Set:
+
+```bash
+export KILN_MONITOR_SENSOR_MODEL=MAX31855
+export KILN_MONITOR_SPI_CS_PIN=D5
+export KILN_MONITOR_THERMOCOUPLE_TYPE=K
+```
+
+### MAX31856 Board
+
 - `VIN` -> `3.3V`
 - `GND` -> `GND`
 - `SCK` -> Pi `SCLK`
@@ -73,7 +97,7 @@ kiln-monitor/
 - `SDI` -> Pi `MOSI`
 - `CS` -> Pi `GPIO5` by default in this code
 
-If you wire chip select to a different pin, set `KILN_MONITOR_MAX31856_CS_PIN` to a valid Blinka board pin name such as `D5`, `D6`, or `CE0`.
+If you wire chip select to a different pin, set `KILN_MONITOR_SPI_CS_PIN` to a valid Blinka board pin name such as `D5`, `D6`, or `CE0`.
 
 ## Running
 
@@ -87,7 +111,8 @@ Useful runtime overrides:
 
 ```bash
 export KILN_MONITOR_READ_INTERVAL_SECONDS=2
-export KILN_MONITOR_MAX31856_CS_PIN=D5
+export KILN_MONITOR_SENSOR_MODEL=MAX31855
+export KILN_MONITOR_SPI_CS_PIN=D5
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 python main.py
@@ -109,8 +134,8 @@ python main.py --diagnostic --diagnostic-samples 10 --diagnostic-delay-seconds 1
 
 This mode:
 
-- verifies the configured chip-select pin and thermocouple type
-- initializes the MAX31856
+- verifies the configured sensor model, chip-select pin, and thermocouple type
+- initializes the MAX31855 or MAX31856
 - reads several samples in a row
 - prints temperature, sample-to-sample delta, or a fault reason
 - exits immediately with a success or failure code
@@ -140,7 +165,8 @@ User=pi
 WorkingDirectory=/path/to/kiln-monitor
 Environment=PYTHONUNBUFFERED=1
 Environment=KILN_MONITOR_READ_INTERVAL_SECONDS=2
-Environment=KILN_MONITOR_MAX31856_CS_PIN=D5
+Environment=KILN_MONITOR_SENSOR_MODEL=MAX31855
+Environment=KILN_MONITOR_SPI_CS_PIN=D5
 Environment=KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 ExecStart=/path/to/kiln-monitor/.venv/bin/python /path/to/kiln-monitor/main.py
 Restart=always
@@ -189,5 +215,5 @@ The current structure leaves room to add:
 
 - Keep thermocouple extension polarity correct all the way to the amplifier.
 - Avoid running thermocouple wiring alongside mains wiring where possible.
-- Mount the Pi and MAX31856 away from kiln body heat and strain on the probe cable.
+- Mount the Pi and thermocouple amplifier board away from kiln body heat and strain on the probe cable.
 - Test fault behavior by temporarily disconnecting the thermocouple before relying on the system.

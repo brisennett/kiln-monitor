@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from config import SQLITE_SYNCHRONOUS_MODE
-from sensor.max31856_reader import TemperatureSample
+from sensor.common import TemperatureSample
 
 
 class SQLiteLogger:
