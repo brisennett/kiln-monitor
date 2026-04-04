@@ -23,6 +23,7 @@ CSV is still useful for exports, but SQLite is a more reliable primary log forma
 kiln-monitor/
   main.py
   status.py
+  dashboard.py
   config.py
   requirements.txt
   sensor/
@@ -159,6 +160,18 @@ Print the latest sample, sample age, last fault, and total row count from SQLite
 ```bash
 python status.py
 ```
+
+## Local Dashboard
+
+Serve a read-only LAN dashboard with a live status summary and temperature trend graph:
+
+```bash
+python dashboard.py --host 0.0.0.0 --port 8080
+```
+
+Then open `http://<pi-hostname-or-ip>:8080/` from another device on the same network.
+
+The page auto-refreshes every 5 seconds and includes `1h`, `24h`, and `7d` trend views.
 
 ## Running As A Service
 
