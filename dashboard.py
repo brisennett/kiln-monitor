@@ -641,6 +641,10 @@ PAGE_HTML = """<!doctype html>
                   <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
                 </div>
                 <div>
+                  <label for="ruleCooldown">Cooldown Minutes</label>
+                  <input id="ruleCooldown" name="notify_cooldown_minutes" type="number" step="0.1" value="15" min="0" required />
+                </div>
+                <div>
                   <label for="ruleEnabled">Enabled</label>
                   <select id="ruleEnabled" name="enabled">
                     <option value="true" selected>Enabled</option>
@@ -1141,6 +1145,7 @@ PAGE_HTML = """<!doctype html>
       document.getElementById("ruleSeverity").value = "WARNING";
       document.getElementById("ruleEnabled").value = "true";
       document.getElementById("ruleHysteresis").value = "5";
+      document.getElementById("ruleCooldown").value = "15";
       document.getElementById("ruleColor").value = "#38bdf8";
       document.getElementById("ruleNotifyEmail").value = "false";
       document.getElementById("ruleNotifySms").value = "false";
@@ -1673,7 +1678,7 @@ PAGE_HTML = """<!doctype html>
       rules.forEach((rule) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
           <td>${formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
           <td>${rule.severity}</td>
@@ -1702,6 +1707,7 @@ PAGE_HTML = """<!doctype html>
           document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
           document.getElementById("ruleSeverity").value = rule.severity;
           document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+          document.getElementById("ruleCooldown").value = Number(rule.notify_cooldown_minutes ?? 15).toFixed(1);
           document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
           document.getElementById("ruleColor").value = rule.color_hex;
           document.getElementById("ruleNotifyEmail").value = rule.notify_email ? "true" : "false";
@@ -1947,6 +1953,7 @@ PAGE_HTML = """<!doctype html>
         threshold_f: convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
         severity: document.getElementById("ruleSeverity").value,
         hysteresis_f: convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
+        notify_cooldown_minutes: Number(document.getElementById("ruleCooldown").value),
         enabled: document.getElementById("ruleEnabled").value === "true",
         color_hex: document.getElementById("ruleColor").value,
         notify_email: document.getElementById("ruleNotifyEmail").value === "true",
@@ -2058,6 +2065,7 @@ def open_readwrite_connection() -> sqlite3.Connection:
             threshold_f REAL NOT NULL,
             severity TEXT NOT NULL,
             hysteresis_f REAL NOT NULL DEFAULT 5.0,
+            notify_cooldown_minutes REAL NOT NULL DEFAULT 15.0,
             active INTEGER NOT NULL DEFAULT 0,
             last_triggered_at TEXT
         )
@@ -2080,6 +2088,10 @@ def open_readwrite_connection() -> sqlite3.Connection:
     if "notify_push" not in existing_names:
         connection.execute(
             "ALTER TABLE alert_rules ADD COLUMN notify_push INTEGER NOT NULL DEFAULT 0"
+        )
+    if "notify_cooldown_minutes" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN notify_cooldown_minutes REAL NOT NULL DEFAULT 15.0"
         )
     connection.execute(
         """
@@ -2161,9 +2173,9 @@ def fetch_dashboard_status() -> dict:
             , (alert_acknowledged_at, alert_acknowledged_at)).fetchone()
         active_alert_rule = None
         if table_exists(connection, "alert_rules"):
-            select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at"
+            select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, notify_cooldown_minutes, active, last_triggered_at"
             if table_has_column(connection, "alert_rules", "color_hex"):
-                select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, color_hex, active, last_triggered_at"
+                select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, notify_cooldown_minutes, color_hex, active, last_triggered_at"
             active_rows = connection.execute(
                 f"""
                 SELECT {select_fields}
@@ -2491,6 +2503,7 @@ def fetch_alert_rules() -> dict:
                 "threshold_f": row["threshold_f"],
                 "severity": row["severity"],
                 "hysteresis_f": row["hysteresis_f"],
+                "notify_cooldown_minutes": row["notify_cooldown_minutes"] if "notify_cooldown_minutes" in row.keys() else 15.0,
                 "color_hex": row["color_hex"],
                 "notify_email": bool(row["notify_email"]),
                 "notify_sms": bool(row["notify_sms"]),
@@ -2601,6 +2614,7 @@ def send_test_alert(payload: dict) -> dict:
         threshold_f=0.0,
         severity="INFO",
         hysteresis_f=0.0,
+        notify_cooldown_minutes=0.0,
         color_hex="#38bdf8",
         notify_email="EMAIL" in normalized_channels,
         notify_sms="SMS" in normalized_channels,
@@ -2659,6 +2673,7 @@ def parse_alert_rule_payload(payload: dict) -> AlertRule:
         threshold_f=float(payload.get("threshold_f")),
         severity=str(payload.get("severity", "")).strip().upper(),
         hysteresis_f=float(payload.get("hysteresis_f", 0.0)),
+        notify_cooldown_minutes=float(payload.get("notify_cooldown_minutes", 15.0)),
         color_hex=str(payload.get("color_hex", "#38bdf8")).strip(),
         notify_email=bool(payload.get("notify_email", False)),
         notify_sms=bool(payload.get("notify_sms", False)),
@@ -2683,6 +2698,7 @@ def create_alert_rule(payload: dict) -> dict:
                 threshold_f,
                 severity,
                 hysteresis_f,
+                notify_cooldown_minutes,
                 color_hex,
                 notify_email,
                 notify_sms,
@@ -2698,6 +2714,7 @@ def create_alert_rule(payload: dict) -> dict:
                 rule.threshold_f,
                 rule.severity,
                 rule.hysteresis_f,
+                rule.notify_cooldown_minutes,
                 rule.color_hex,
                 int(rule.notify_email),
                 int(rule.notify_sms),
@@ -2728,7 +2745,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
         connection.execute(
             """
             UPDATE alert_rules
-            SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, severity = ?, hysteresis_f = ?, color_hex = ?,
+            SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, severity = ?, hysteresis_f = ?, notify_cooldown_minutes = ?, color_hex = ?,
                 notify_email = ?, notify_sms = ?, notify_push = ?,
                 active = CASE WHEN ? = 1 THEN active ELSE 0 END
             WHERE id = ?
@@ -2740,6 +2757,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
                 rule.threshold_f,
                 rule.severity,
                 rule.hysteresis_f,
+                rule.notify_cooldown_minutes,
                 rule.color_hex,
                 int(rule.notify_email),
                 int(rule.notify_sms),
@@ -2819,6 +2837,7 @@ def alert_rule_row_to_payload(row: sqlite3.Row) -> dict:
         "threshold_f": row["threshold_f"],
         "severity": row["severity"],
         "hysteresis_f": row["hysteresis_f"],
+        "notify_cooldown_minutes": row["notify_cooldown_minutes"] if "notify_cooldown_minutes" in row.keys() else 15.0,
         "active": bool(row["active"]),
         "last_triggered_at": row["last_triggered_at"],
         "color_hex": row["color_hex"] if "color_hex" in row.keys() else "#38bdf8",

@@ -43,6 +43,7 @@ class AlertRule:
     threshold_f: float
     severity: str
     hysteresis_f: float
+    notify_cooldown_minutes: float
     color_hex: str
     notify_email: bool = False
     notify_sms: bool = False
@@ -60,6 +61,8 @@ def validate_rule(rule: AlertRule) -> None:
         raise ValueError(f"unsupported alert severity: {rule.severity}")
     if rule.hysteresis_f < 0:
         raise ValueError("alert hysteresis must be zero or greater")
+    if rule.notify_cooldown_minutes < 0:
+        raise ValueError("alert cooldown must be zero or greater")
     if not HEX_COLOR_PATTERN.match(rule.color_hex):
         raise ValueError("alert color must be a hex value like #FF6600")
 

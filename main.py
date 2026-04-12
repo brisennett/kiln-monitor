@@ -83,6 +83,26 @@ def deliver_alerts(storage: SQLiteLogger, alerts, updated_rules, logger) -> None
                     logger.exception("failed to log alert delivery failure for %s", channel)
                 continue
 
+            if storage.should_rate_limit_alert(
+                alert,
+                channel=channel,
+                cooldown_minutes=rule.notify_cooldown_minutes,
+            ):
+                detail = (
+                    f"suppressed by cooldown ({rule.notify_cooldown_minutes:.1f} min)"
+                )
+                try:
+                    storage.log_alert_delivery(
+                        alert,
+                        channel=channel,
+                        success=False,
+                        detail=detail,
+                    )
+                except Exception:
+                    logger.exception("failed to log rate-limited alert delivery for %s", channel)
+                logger.info("alert delivery skipped via %s: %s", channel, detail)
+                continue
+
             try:
                 result = notifier.send(alert, rule)
                 storage.log_alert_delivery(

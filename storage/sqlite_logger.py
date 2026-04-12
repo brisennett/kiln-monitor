@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from config import SQLITE_SYNCHRONOUS_MODE
@@ -70,12 +71,14 @@ class SQLiteLogger:
                 alert_timestamp_utc TEXT NOT NULL,
                 rule_id INTEGER,
                 rule_name TEXT,
+                alert_kind TEXT,
                 channel TEXT NOT NULL,
                 success INTEGER NOT NULL,
                 detail TEXT NOT NULL
             )
             """
         )
+        self._ensure_column("alert_delivery_log", "alert_kind", "TEXT")
         self._connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_alert_log_timestamp_utc
@@ -98,6 +101,7 @@ class SQLiteLogger:
                 threshold_f REAL NOT NULL,
                 severity TEXT NOT NULL,
                 hysteresis_f REAL NOT NULL DEFAULT 5.0,
+                notify_cooldown_minutes REAL NOT NULL DEFAULT 15.0,
                 color_hex TEXT NOT NULL DEFAULT '#38bdf8',
                 notify_email INTEGER NOT NULL DEFAULT 0,
                 notify_sms INTEGER NOT NULL DEFAULT 0,
@@ -108,6 +112,7 @@ class SQLiteLogger:
             """
         )
         self._ensure_column("alert_rules", "color_hex", "TEXT NOT NULL DEFAULT '#38bdf8'")
+        self._ensure_column("alert_rules", "notify_cooldown_minutes", "REAL NOT NULL DEFAULT 15.0")
         self._ensure_column("alert_rules", "notify_email", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("alert_rules", "notify_sms", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("alert_rules", "notify_push", "INTEGER NOT NULL DEFAULT 0")
@@ -178,6 +183,7 @@ class SQLiteLogger:
                 threshold_f,
                 severity,
                 hysteresis_f,
+                notify_cooldown_minutes,
                 color_hex,
                 notify_email,
                 notify_sms,
@@ -197,12 +203,13 @@ class SQLiteLogger:
                 threshold_f=row[4],
                 severity=row[5],
                 hysteresis_f=row[6],
-                color_hex=row[7],
-                notify_email=bool(row[8]),
-                notify_sms=bool(row[9]),
-                notify_push=bool(row[10]),
-                active=bool(row[11]),
-                last_triggered_at=row[12],
+                notify_cooldown_minutes=row[7],
+                color_hex=row[8],
+                notify_email=bool(row[9]),
+                notify_sms=bool(row[10]),
+                notify_push=bool(row[11]),
+                active=bool(row[12]),
+                last_triggered_at=row[13],
             )
             for row in rows
         ]
@@ -236,22 +243,56 @@ class SQLiteLogger:
                 alert_timestamp_utc,
                 rule_id,
                 rule_name,
+                alert_kind,
                 channel,
                 success,
                 detail
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 alert.timestamp_utc,
                 alert.timestamp_utc,
                 alert.rule_id,
                 alert.rule_name,
+                alert.kind,
                 channel,
                 int(success),
                 detail,
             ),
         )
         self._connection.commit()
+
+    def should_rate_limit_alert(
+        self,
+        alert: AlertEvent,
+        channel: str,
+        cooldown_minutes: float,
+    ) -> bool:
+        if cooldown_minutes <= 0 or alert.rule_id is None:
+            return False
+
+        row = self._connection.execute(
+            """
+            SELECT timestamp_utc
+            FROM alert_delivery_log
+            WHERE rule_id = ?
+              AND channel = ?
+              AND alert_kind = ?
+              AND success = 1
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (alert.rule_id, channel, alert.kind),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return False
+
+        try:
+            last_sent_at = datetime.fromisoformat(row[0])
+        except ValueError:
+            return False
+
+        return (datetime.now(timezone.utc) - last_sent_at) < timedelta(minutes=cooldown_minutes)
 
     def close(self) -> None:
         self._connection.close()
