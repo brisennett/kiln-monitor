@@ -327,6 +327,17 @@ PAGE_HTML = """<!doctype html>
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .channel-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .panel-divider {
+      border: 0;
+      border-top: 1px solid #273449;
+      margin: 14px 0;
+    }
     .channel-sections {
       display: flex;
       flex-direction: column;
@@ -361,9 +372,30 @@ PAGE_HTML = """<!doctype html>
     }
     .channel-health {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 10px;
       margin-bottom: 14px;
+    }
+    .channel-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+    }
+    .channel-status-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .channel-status-name {
+      font-weight: 700;
+      min-width: 56px;
+    }
+    .channel-test-button {
+      flex: 0 0 auto;
     }
     .pill-warning {
       background: #7c2d12;
@@ -669,9 +701,19 @@ PAGE_HTML = """<!doctype html>
           </section>
 
           <section id="alertChannelsTab" class="tab-panel" data-alert-tab-panel="channels" hidden>
+            <div class="channel-toolbar">
+              <button type="button" id="saveChannelSettingsButton">Save Channel Settings</button>
+              <button type="button" id="resetChannelSettingsButton">Reload Saved Settings</button>
+            </div>
+            <div id="channelSettingsStatus" class="success-text"></div>
+
+            <hr class="panel-divider" />
+
             <div class="channel-health" id="channelHealth">
               <span class="pill">Loading channels...</span>
             </div>
+
+            <hr class="panel-divider" />
 
             <div class="channel-sections">
               <section class="channel-section">
@@ -766,19 +808,6 @@ PAGE_HTML = """<!doctype html>
                   </div>
                 </div>
               </section>
-            </div>
-
-            <div class="rule-actions">
-              <button type="button" id="saveChannelSettingsButton">Save Channel Settings</button>
-              <button type="button" id="resetChannelSettingsButton">Reload Saved Settings</button>
-            </div>
-            <div id="channelSettingsStatus" class="success-text"></div>
-
-            <div class="test-actions">
-              <button type="button" id="sendTestEmailButton">Send Test Email</button>
-              <button type="button" id="sendTestSmsButton">Send Test SMS</button>
-              <button type="button" id="sendTestPushButton">Send Test Push</button>
-              <button type="button" id="sendTestAllButton">Send All Configured</button>
             </div>
             <div class="subtle test-status" id="testAlertStatus"></div>
           </section>
@@ -882,10 +911,6 @@ PAGE_HTML = """<!doctype html>
     const resetChannelSettingsButton = document.getElementById("resetChannelSettingsButton");
     const channelSettingsStatus = document.getElementById("channelSettingsStatus");
     const testAlertStatus = document.getElementById("testAlertStatus");
-    const sendTestEmailButton = document.getElementById("sendTestEmailButton");
-    const sendTestSmsButton = document.getElementById("sendTestSmsButton");
-    const sendTestPushButton = document.getElementById("sendTestPushButton");
-    const sendTestAllButton = document.getElementById("sendTestAllButton");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const sidebarZone = document.getElementById("sidebarZone");
@@ -940,19 +965,33 @@ PAGE_HTML = """<!doctype html>
     }
 
     function renderChannelHealth() {
-      const channels = ["EMAIL", "SMS", "PUSH"];
+      const channelLabels = {
+        EMAIL: "Email",
+        SMS: "SMS",
+        PUSH: "Push",
+      };
       channelHealth.innerHTML = "";
-      channels.forEach((channel) => {
+      ["EMAIL", "SMS", "PUSH"].forEach((channel) => {
         const configured = Boolean(alertChannelStatus[channel]);
-        const badge = document.createElement("span");
-        badge.className = `pill ${configured ? "pill-on" : "pill-warning"}`;
-        badge.textContent = configured ? `${channel} ready` : `${channel} not configured`;
-        channelHealth.appendChild(badge);
+        const row = document.createElement("div");
+        row.className = "channel-status-row";
+        const statusClass = configured ? "pill pill-on" : "pill pill-warning";
+        const statusText = configured ? "Configured" : "Not Configured";
+        row.innerHTML = `
+          <div class="channel-status-main">
+            <div class="channel-status-name">${channelLabels[channel]}</div>
+            <span class="${statusClass}">${statusText}</span>
+          </div>
+          <button type="button" class="channel-test-button" data-test-channel="${channel}" ${configured ? "" : "disabled"}>Test</button>
+        `;
+        channelHealth.appendChild(row);
       });
-      sendTestEmailButton.disabled = !alertChannelStatus.EMAIL;
-      sendTestSmsButton.disabled = !alertChannelStatus.SMS;
-      sendTestPushButton.disabled = !alertChannelStatus.PUSH;
-      sendTestAllButton.disabled = !Object.values(alertChannelStatus).some(Boolean);
+
+      channelHealth.querySelectorAll("[data-test-channel]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await sendTestAlert([button.dataset.testChannel]);
+        });
+      });
     }
 
     function populateChannelSettingsForm(settings) {
@@ -1822,25 +1861,6 @@ PAGE_HTML = """<!doctype html>
       button.addEventListener("click", () => {
         setActiveAlertTab(button.dataset.alertTab);
       });
-    });
-
-    sendTestEmailButton.addEventListener("click", async () => {
-      await sendTestAlert(["EMAIL"]);
-    });
-
-    sendTestSmsButton.addEventListener("click", async () => {
-      await sendTestAlert(["SMS"]);
-    });
-
-    sendTestPushButton.addEventListener("click", async () => {
-      await sendTestAlert(["PUSH"]);
-    });
-
-    sendTestAllButton.addEventListener("click", async () => {
-      const channels = Object.entries(alertChannelStatus)
-        .filter(([, enabled]) => enabled)
-        .map(([channel]) => channel);
-      await sendTestAlert(channels);
     });
 
     saveChannelSettingsButton.addEventListener("click", async () => {
