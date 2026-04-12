@@ -462,6 +462,27 @@ PAGE_HTML = """<!doctype html>
                 <label for="ruleColor">Accent Color</label>
                 <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
               </div>
+              <div>
+                <label for="ruleNotifyEmail">Email</label>
+                <select id="ruleNotifyEmail" name="notify_email">
+                  <option value="false" selected>Off</option>
+                  <option value="true">On</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleNotifySms">SMS</label>
+                <select id="ruleNotifySms" name="notify_sms">
+                  <option value="false" selected>Off</option>
+                  <option value="true">On</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleNotifyPush">Push</label>
+                <select id="ruleNotifyPush" name="notify_push">
+                  <option value="false" selected>Off</option>
+                  <option value="true">On</option>
+                </select>
+              </div>
             </div>
             <div class="rule-actions">
               <button type="submit" id="ruleSubmit">Add Rule</button>
@@ -667,6 +688,9 @@ PAGE_HTML = """<!doctype html>
       document.getElementById("ruleEnabled").value = "true";
       document.getElementById("ruleHysteresis").value = "5";
       document.getElementById("ruleColor").value = "#38bdf8";
+      document.getElementById("ruleNotifyEmail").value = "false";
+      document.getElementById("ruleNotifySms").value = "false";
+      document.getElementById("ruleNotifyPush").value = "false";
       ruleSubmit.textContent = "Add Rule";
       ruleError.textContent = "";
       updateRuleUnitLabels();
@@ -1195,7 +1219,7 @@ PAGE_HTML = """<!doctype html>
       rules.forEach((rule) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div></td>
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
           <td>${formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
           <td>${rule.severity}</td>
@@ -1226,6 +1250,9 @@ PAGE_HTML = """<!doctype html>
           document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
           document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
           document.getElementById("ruleColor").value = rule.color_hex;
+          document.getElementById("ruleNotifyEmail").value = rule.notify_email ? "true" : "false";
+          document.getElementById("ruleNotifySms").value = rule.notify_sms ? "true" : "false";
+          document.getElementById("ruleNotifyPush").value = rule.notify_push ? "true" : "false";
           ruleSubmit.textContent = "Save Rule";
           ruleError.textContent = "";
         });
@@ -1342,6 +1369,9 @@ PAGE_HTML = """<!doctype html>
         hysteresis_f: convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
         enabled: document.getElementById("ruleEnabled").value === "true",
         color_hex: document.getElementById("ruleColor").value,
+        notify_email: document.getElementById("ruleNotifyEmail").value === "true",
+        notify_sms: document.getElementById("ruleNotifySms").value === "true",
+        notify_push: document.getElementById("ruleNotifyPush").value === "true",
       };
 
       const path = editingRuleId === null
@@ -1453,6 +1483,18 @@ def open_readwrite_connection() -> sqlite3.Connection:
     if "color_hex" not in existing_names:
         connection.execute(
             "ALTER TABLE alert_rules ADD COLUMN color_hex TEXT NOT NULL DEFAULT '#38bdf8'"
+        )
+    if "notify_email" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN notify_email INTEGER NOT NULL DEFAULT 0"
+        )
+    if "notify_sms" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN notify_sms INTEGER NOT NULL DEFAULT 0"
+        )
+    if "notify_push" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN notify_push INTEGER NOT NULL DEFAULT 0"
         )
     connection.execute(
         """
@@ -1790,7 +1832,7 @@ def fetch_alert_rules() -> dict:
         if table_has_column(connection, "alert_rules", "color_hex"):
             select_fields = (
                 "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, "
-                "color_hex, active, last_triggered_at"
+                "color_hex, notify_email, notify_sms, notify_push, active, last_triggered_at"
             )
         rows = connection.execute(
             f"""
@@ -1813,6 +1855,9 @@ def fetch_alert_rules() -> dict:
                 "severity": row["severity"],
                 "hysteresis_f": row["hysteresis_f"],
                 "color_hex": row["color_hex"],
+                "notify_email": bool(row["notify_email"]),
+                "notify_sms": bool(row["notify_sms"]),
+                "notify_push": bool(row["notify_push"]),
                 "active": bool(row["active"]),
                 "last_triggered_at": row["last_triggered_at"],
             }
@@ -1831,6 +1876,9 @@ def parse_alert_rule_payload(payload: dict) -> AlertRule:
         severity=str(payload.get("severity", "")).strip().upper(),
         hysteresis_f=float(payload.get("hysteresis_f", 0.0)),
         color_hex=str(payload.get("color_hex", "#38bdf8")).strip(),
+        notify_email=bool(payload.get("notify_email", False)),
+        notify_sms=bool(payload.get("notify_sms", False)),
+        notify_push=bool(payload.get("notify_push", False)),
         active=False,
         last_triggered_at=None,
     )
@@ -1852,9 +1900,12 @@ def create_alert_rule(payload: dict) -> dict:
                 severity,
                 hysteresis_f,
                 color_hex,
+                notify_email,
+                notify_sms,
+                notify_push,
                 active,
                 last_triggered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
             """,
             (
                 rule.name,
@@ -1864,6 +1915,9 @@ def create_alert_rule(payload: dict) -> dict:
                 rule.severity,
                 rule.hysteresis_f,
                 rule.color_hex,
+                int(rule.notify_email),
+                int(rule.notify_sms),
+                int(rule.notify_push),
             ),
         )
         connection.commit()
@@ -1891,6 +1945,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
             """
             UPDATE alert_rules
             SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, severity = ?, hysteresis_f = ?, color_hex = ?,
+                notify_email = ?, notify_sms = ?, notify_push = ?,
                 active = CASE WHEN ? = 1 THEN active ELSE 0 END
             WHERE id = ?
             """,
@@ -1902,6 +1957,9 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
                 rule.severity,
                 rule.hysteresis_f,
                 rule.color_hex,
+                int(rule.notify_email),
+                int(rule.notify_sms),
+                int(rule.notify_push),
                 int(rule.enabled),
                 rule_id,
             ),
@@ -1980,6 +2038,9 @@ def alert_rule_row_to_payload(row: sqlite3.Row) -> dict:
         "active": bool(row["active"]),
         "last_triggered_at": row["last_triggered_at"],
         "color_hex": row["color_hex"] if "color_hex" in row.keys() else "#38bdf8",
+        "notify_email": bool(row["notify_email"]) if "notify_email" in row.keys() else False,
+        "notify_sms": bool(row["notify_sms"]) if "notify_sms" in row.keys() else False,
+        "notify_push": bool(row["notify_push"]) if "notify_push" in row.keys() else False,
     }
     return payload
 

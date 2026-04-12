@@ -209,7 +209,43 @@ Each rule can be named, enabled or disabled, assigned a severity, and given a re
 
 Each alert rule can also define its own accent color. When an alert rule is active, the dashboard uses the highest-priority active rule color for the trend line and card accents.
 
+Each rule can independently enable any combination of:
+
+- email
+- SMS
+- push webhook
+
+Channel delivery is controlled in two layers:
+
+- the rule enables one or more channels in the dashboard
+- the matching global notifier is configured with environment variables on the Pi
+
 Alert events are written to SQLite and shown in both `python status.py` and the local dashboard.
+
+Delivery attempts are also written to `alert_delivery_log`.
+
+Example environment variables:
+
+```bash
+export KILN_MONITOR_ALERT_EMAIL_ENABLED=true
+export KILN_MONITOR_ALERT_EMAIL_SMTP_HOST=smtp.example.com
+export KILN_MONITOR_ALERT_EMAIL_SMTP_PORT=587
+export KILN_MONITOR_ALERT_EMAIL_SMTP_USERNAME=example_user
+export KILN_MONITOR_ALERT_EMAIL_SMTP_PASSWORD=example_password
+export KILN_MONITOR_ALERT_EMAIL_FROM=kiln@example.com
+export KILN_MONITOR_ALERT_EMAIL_TO=you@example.com
+
+export KILN_MONITOR_ALERT_SMS_ENABLED=true
+export KILN_MONITOR_TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export KILN_MONITOR_TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export KILN_MONITOR_TWILIO_FROM=+18885551234
+export KILN_MONITOR_ALERT_SMS_TO=+15555551234
+
+export KILN_MONITOR_ALERT_PUSH_ENABLED=true
+export KILN_MONITOR_ALERT_PUSH_WEBHOOK_URL=https://your-push-endpoint.example.com/hook
+```
+
+If a rule enables a channel but the global notifier is not configured, the alert remains in `alert_log` and the delivery failure is recorded in `alert_delivery_log`.
 
 ## Retention And Archive
 

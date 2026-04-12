@@ -17,6 +17,7 @@ from config import (
     STATUS_EVERY_N_SAMPLES,
     THERMOCOUPLE_TYPE,
 )
+from notifiers import NotificationError, build_enabled_notifiers, channels_for_rule
 from sensor import SensorReadError, TemperatureSample, build_sensor_reader
 from storage.sqlite_logger import SQLiteLogger
 from utils.runtime import format_trend, setup_app_logger
@@ -47,6 +48,61 @@ def persist_alerts(storage: SQLiteLogger, alerts, logger) -> None:
             storage.log_alert(alert)
         except Exception:
             logger.exception("failed to persist alert with level=%s kind=%s", alert.level, alert.kind)
+
+
+def deliver_alerts(storage: SQLiteLogger, alerts, updated_rules, logger) -> None:
+    rule_by_id = {
+        rule.id: rule
+        for rule in updated_rules
+        if rule.id is not None
+    }
+    notifiers = {
+        notifier.channel_name: notifier
+        for notifier in build_enabled_notifiers()
+    }
+
+    for alert in alerts:
+        if alert.rule_id is None:
+            continue
+
+        rule = rule_by_id.get(alert.rule_id)
+        if rule is None:
+            continue
+
+        for channel in channels_for_rule(rule):
+            notifier = notifiers.get(channel)
+            if notifier is None:
+                try:
+                    storage.log_alert_delivery(
+                        alert,
+                        channel=channel,
+                        success=False,
+                        detail="channel enabled on rule but notifier is not configured globally",
+                    )
+                except Exception:
+                    logger.exception("failed to log alert delivery failure for %s", channel)
+                continue
+
+            try:
+                result = notifier.send(alert, rule)
+                storage.log_alert_delivery(
+                    alert,
+                    channel=result.channel,
+                    success=result.success,
+                    detail=result.detail,
+                )
+                logger.info("alert delivered via %s: %s", result.channel, result.detail)
+            except NotificationError as exc:
+                try:
+                    storage.log_alert_delivery(
+                        alert,
+                        channel=channel,
+                        success=False,
+                        detail=str(exc),
+                    )
+                except Exception:
+                    logger.exception("failed to log alert delivery failure for %s", channel)
+                logger.warning("alert delivery failed via %s: %s", channel, exc)
 
 
 def reject_unrealistic_jump(sample: TemperatureSample, previous_temp_c: float | None) -> None:
@@ -154,6 +210,7 @@ def run() -> int:
                         )
                     ):
                         storage.update_alert_rule_state(updated_rule)
+                deliver_alerts(storage, alerts, updated_rules, logger)
                 for alert in alerts:
                     if alert.level == "CRITICAL":
                         logger.warning("alert %s: %s", alert.kind, alert.detail)

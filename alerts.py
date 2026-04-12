@@ -44,6 +44,9 @@ class AlertRule:
     severity: str
     hysteresis_f: float
     color_hex: str
+    notify_email: bool = False
+    notify_sms: bool = False
+    notify_push: bool = False
     active: bool = False
     last_triggered_at: str | None = None
 

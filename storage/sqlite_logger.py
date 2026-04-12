@@ -64,8 +64,28 @@ class SQLiteLogger:
         self._ensure_column("alert_log", "rule_name", "TEXT")
         self._connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS alert_delivery_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT NOT NULL,
+                alert_timestamp_utc TEXT NOT NULL,
+                rule_id INTEGER,
+                rule_name TEXT,
+                channel TEXT NOT NULL,
+                success INTEGER NOT NULL,
+                detail TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_alert_log_timestamp_utc
             ON alert_log(timestamp_utc)
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_alert_delivery_log_timestamp_utc
+            ON alert_delivery_log(timestamp_utc)
             """
         )
         self._connection.execute(
@@ -79,12 +99,18 @@ class SQLiteLogger:
                 severity TEXT NOT NULL,
                 hysteresis_f REAL NOT NULL DEFAULT 5.0,
                 color_hex TEXT NOT NULL DEFAULT '#38bdf8',
+                notify_email INTEGER NOT NULL DEFAULT 0,
+                notify_sms INTEGER NOT NULL DEFAULT 0,
+                notify_push INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 0,
                 last_triggered_at TEXT
             )
             """
         )
         self._ensure_column("alert_rules", "color_hex", "TEXT NOT NULL DEFAULT '#38bdf8'")
+        self._ensure_column("alert_rules", "notify_email", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("alert_rules", "notify_sms", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("alert_rules", "notify_push", "INTEGER NOT NULL DEFAULT 0")
         self._connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
@@ -144,7 +170,20 @@ class SQLiteLogger:
     def fetch_alert_rules(self) -> list[AlertRule]:
         rows = self._connection.execute(
             """
-            SELECT id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, color_hex, active, last_triggered_at
+            SELECT
+                id,
+                name,
+                enabled,
+                rule_type,
+                threshold_f,
+                severity,
+                hysteresis_f,
+                color_hex,
+                notify_email,
+                notify_sms,
+                notify_push,
+                active,
+                last_triggered_at
             FROM alert_rules
             ORDER BY threshold_f ASC, id ASC
             """
@@ -159,8 +198,11 @@ class SQLiteLogger:
                 severity=row[5],
                 hysteresis_f=row[6],
                 color_hex=row[7],
-                active=bool(row[8]),
-                last_triggered_at=row[9],
+                notify_email=bool(row[8]),
+                notify_sms=bool(row[9]),
+                notify_push=bool(row[10]),
+                active=bool(row[11]),
+                last_triggered_at=row[12],
             )
             for row in rows
         ]
@@ -176,6 +218,37 @@ class SQLiteLogger:
                 int(rule.active),
                 rule.last_triggered_at,
                 rule.id,
+            ),
+        )
+        self._connection.commit()
+
+    def log_alert_delivery(
+        self,
+        alert: AlertEvent,
+        channel: str,
+        success: bool,
+        detail: str,
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO alert_delivery_log (
+                timestamp_utc,
+                alert_timestamp_utc,
+                rule_id,
+                rule_name,
+                channel,
+                success,
+                detail
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                alert.timestamp_utc,
+                alert.timestamp_utc,
+                alert.rule_id,
+                alert.rule_name,
+                channel,
+                int(success),
+                detail,
             ),
         )
         self._connection.commit()
