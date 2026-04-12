@@ -229,6 +229,24 @@ PAGE_HTML = """<!doctype html>
       padding: 16px;
       margin-top: 0;
     }
+    .tab-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .tab-button {
+      background: transparent;
+      border-color: #334155;
+    }
+    .tab-button.active {
+      background: var(--accent-soft);
+      border-color: var(--accent-color);
+      color: #f8fafc;
+    }
+    .tab-panel[hidden] {
+      display: none;
+    }
     .rules-grid {
       display: grid;
       gap: 12px;
@@ -239,6 +257,39 @@ PAGE_HTML = """<!doctype html>
       overflow-x: auto;
       margin: 0 -4px;
       padding: 0 4px;
+    }
+    .tab-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .delivery-summary {
+      color: #9ca3af;
+      font-size: 0.9rem;
+      margin-bottom: 0;
+    }
+    .delivery-detail {
+      min-width: 220px;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .channel-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .channel-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(51, 65, 85, 0.9);
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
     label {
       display: block;
@@ -416,99 +467,132 @@ PAGE_HTML = """<!doctype html>
         <section class="rules-panel">
           <div class="chart-top">
             <div>
-              <div class="label">Alert Rules</div>
-              <div class="subtle">Configure milestone alerts and high/low safety alerts from the browser.</div>
+              <div class="label">Alerting</div>
+              <div class="subtle">Manage rules and check whether email, SMS, and push deliveries are succeeding.</div>
             </div>
           </div>
 
-          <form id="ruleForm">
-            <div class="rules-grid">
-              <div>
-                <label for="ruleName">Name</label>
-                <input id="ruleName" name="name" placeholder="Cone 06 reached" required />
-              </div>
-              <div>
-                <label for="ruleType">Type</label>
-                <select id="ruleType" name="rule_type">
-                  <option value="TARGET_REACHED">Target Reached</option>
-                  <option value="ABOVE_HIGH">Above High</option>
-                  <option value="BELOW_LOW">Below Low</option>
-                </select>
-              </div>
-              <div>
-                <label for="ruleThreshold" id="ruleThresholdLabel">Threshold F</label>
-                <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
-              </div>
-              <div>
-                <label for="ruleSeverity">Severity</label>
-                <select id="ruleSeverity" name="severity">
-                  <option value="INFO">Info</option>
-                  <option value="WARNING" selected>Warning</option>
-                  <option value="CRITICAL">Critical</option>
-                </select>
-              </div>
-              <div>
-                <label for="ruleHysteresis" id="ruleHysteresisLabel">Reset Gap F</label>
-                <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
-              </div>
-              <div>
-                <label for="ruleEnabled">Enabled</label>
-                <select id="ruleEnabled" name="enabled">
-                  <option value="true" selected>Enabled</option>
-                  <option value="false">Disabled</option>
-                </select>
-              </div>
-              <div>
-                <label for="ruleColor">Accent Color</label>
-                <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
-              </div>
-              <div>
-                <label for="ruleNotifyEmail">Email</label>
-                <select id="ruleNotifyEmail" name="notify_email">
-                  <option value="false" selected>Off</option>
-                  <option value="true">On</option>
-                </select>
-              </div>
-              <div>
-                <label for="ruleNotifySms">SMS</label>
-                <select id="ruleNotifySms" name="notify_sms">
-                  <option value="false" selected>Off</option>
-                  <option value="true">On</option>
-                </select>
-              </div>
-              <div>
-                <label for="ruleNotifyPush">Push</label>
-                <select id="ruleNotifyPush" name="notify_push">
-                  <option value="false" selected>Off</option>
-                  <option value="true">On</option>
-                </select>
-              </div>
-            </div>
-            <div class="rule-actions">
-              <button type="submit" id="ruleSubmit">Add Rule</button>
-              <button type="button" id="ruleCancel">Cancel Edit</button>
-            </div>
-            <div id="ruleError" class="error-text"></div>
-          </form>
-
-          <div class="rules-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Threshold</th>
-                  <th>Severity</th>
-                  <th>Status</th>
-                  <th>Last Triggered</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="rulesTableBody">
-                <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
-              </tbody>
-            </table>
+          <div class="tab-strip" role="tablist" aria-label="Alerting tabs">
+            <button type="button" class="tab-button active" data-alert-tab="rules" role="tab" aria-selected="true">Rules</button>
+            <button type="button" class="tab-button" data-alert-tab="deliveries" role="tab" aria-selected="false">Deliveries</button>
           </div>
+
+          <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="rules">
+            <form id="ruleForm">
+              <div class="rules-grid">
+                <div>
+                  <label for="ruleName">Name</label>
+                  <input id="ruleName" name="name" placeholder="Cone 06 reached" required />
+                </div>
+                <div>
+                  <label for="ruleType">Type</label>
+                  <select id="ruleType" name="rule_type">
+                    <option value="TARGET_REACHED">Target Reached</option>
+                    <option value="ABOVE_HIGH">Above High</option>
+                    <option value="BELOW_LOW">Below Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ruleThreshold" id="ruleThresholdLabel">Threshold F</label>
+                  <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
+                </div>
+                <div>
+                  <label for="ruleSeverity">Severity</label>
+                  <select id="ruleSeverity" name="severity">
+                    <option value="INFO">Info</option>
+                    <option value="WARNING" selected>Warning</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ruleHysteresis" id="ruleHysteresisLabel">Reset Gap F</label>
+                  <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
+                </div>
+                <div>
+                  <label for="ruleEnabled">Enabled</label>
+                  <select id="ruleEnabled" name="enabled">
+                    <option value="true" selected>Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ruleColor">Accent Color</label>
+                  <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
+                </div>
+                <div>
+                  <label for="ruleNotifyEmail">Email</label>
+                  <select id="ruleNotifyEmail" name="notify_email">
+                    <option value="false" selected>Off</option>
+                    <option value="true">On</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ruleNotifySms">SMS</label>
+                  <select id="ruleNotifySms" name="notify_sms">
+                    <option value="false" selected>Off</option>
+                    <option value="true">On</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="ruleNotifyPush">Push</label>
+                  <select id="ruleNotifyPush" name="notify_push">
+                    <option value="false" selected>Off</option>
+                    <option value="true">On</option>
+                  </select>
+                </div>
+              </div>
+              <div class="rule-actions">
+                <button type="submit" id="ruleSubmit">Add Rule</button>
+                <button type="button" id="ruleCancel">Cancel Edit</button>
+              </div>
+              <div id="ruleError" class="error-text"></div>
+            </form>
+
+            <div class="rules-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Threshold</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Last Triggered</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="rulesTableBody">
+                  <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="deliveries" hidden>
+            <div class="tab-panel-header">
+              <div>
+                <div class="label">Recent Deliveries</div>
+                <div class="delivery-summary" id="deliveriesSummary">Checking recent alert sends...</div>
+              </div>
+            </div>
+
+            <div class="rules-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Rule</th>
+                    <th>Channel</th>
+                    <th>Result</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody id="deliveriesTableBody">
+                  <tr><td colspan="5" class="subtle">Loading deliveries...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </aside>
     </div>
@@ -561,6 +645,8 @@ PAGE_HTML = """<!doctype html>
     const ruleCancel = document.getElementById("ruleCancel");
     const ruleError = document.getElementById("ruleError");
     const rulesTableBody = document.getElementById("rulesTableBody");
+    const deliveriesTableBody = document.getElementById("deliveriesTableBody");
+    const deliveriesSummary = document.getElementById("deliveriesSummary");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const sidebarZone = document.getElementById("sidebarZone");
@@ -575,6 +661,8 @@ PAGE_HTML = """<!doctype html>
     const panelBgPicker = document.getElementById("panelBgPicker");
     const ruleThresholdLabel = document.getElementById("ruleThresholdLabel");
     const ruleHysteresisLabel = document.getElementById("ruleHysteresisLabel");
+    const alertTabButtons = Array.from(document.querySelectorAll("[data-alert-tab]"));
+    const alertTabPanels = Array.from(document.querySelectorAll("[data-alert-tab-panel]"));
     let selectedRange = "24h";
     let selectedResolution = "auto";
     let selectedUnit = "F";
@@ -586,10 +674,22 @@ PAGE_HTML = """<!doctype html>
     let layoutEditEnabled = false;
     const HISTORY_BUCKET_PRESETS = {"1h":[2,10,30,60,300],"24h":[60,300,600,900,1800],"7d":[300,600,1800,3600,10800]};
     let currentRules = [];
+    let currentDeliveries = [];
     let chartState = {
       points: [],
       plotPoints: [],
     };
+
+    function setActiveAlertTab(tabName) {
+      alertTabButtons.forEach((button) => {
+        const isActive = button.dataset.alertTab === tabName;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      alertTabPanels.forEach((panel) => {
+        panel.hidden = panel.dataset.alertTabPanel !== tabName;
+      });
+    }
 
     function formatTimestamp(isoText) {
       if (!isoText) {
@@ -1269,6 +1369,37 @@ PAGE_HTML = """<!doctype html>
       });
     }
 
+    async function refreshAlertDeliveries() {
+      const response = await fetch("/api/alert-deliveries");
+      const payload = await response.json();
+      const deliveries = payload.deliveries || [];
+      currentDeliveries = deliveries;
+
+      deliveriesSummary.textContent = deliveries.length
+        ? `${deliveries.length} recent delivery attempts. Use this tab to confirm alert sends are actually making it out.`
+        : "No delivery attempts have been logged yet.";
+
+      if (!deliveries.length) {
+        deliveriesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No delivery attempts logged yet.</td></tr>';
+        return;
+      }
+
+      deliveriesTableBody.innerHTML = "";
+      deliveries.forEach((delivery) => {
+        const row = document.createElement("tr");
+        const resultClass = delivery.success ? "pill pill-on" : "pill pill-active";
+        const resultLabel = delivery.success ? "Sent" : "Failed";
+        row.innerHTML = `
+          <td>${formatTimestamp(delivery.timestamp_utc)}<div class="subtle">${delivery.sample_age}</div></td>
+          <td>${delivery.rule_name || "unknown"}</td>
+          <td><div class="channel-badges"><span class="channel-badge">${delivery.channel}</span></div></td>
+          <td><span class="${resultClass}">${resultLabel}</span></td>
+          <td class="delivery-detail">${delivery.detail || "no detail"}</td>
+        `;
+        deliveriesTableBody.appendChild(row);
+      });
+    }
+
     async function refreshHistory() {
       const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
       const response = await fetch(`/api/history?${params.toString()}`);
@@ -1286,7 +1417,7 @@ PAGE_HTML = """<!doctype html>
 
     async function refreshAll() {
       try {
-        await Promise.all([refreshStatus(), refreshHistory(), refreshAlertRules()]);
+        await Promise.all([refreshStatus(), refreshHistory(), refreshAlertRules(), refreshAlertDeliveries()]);
       } catch (error) {
         banner.textContent = `Dashboard refresh failed: ${error}`;
         banner.className = "status-banner status-error";
@@ -1314,6 +1445,12 @@ PAGE_HTML = """<!doctype html>
     resolutionSelect.addEventListener("change", async () => {
       selectedResolution = resolutionSelect.value;
       await refreshHistory();
+    });
+
+    alertTabButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setActiveAlertTab(button.dataset.alertTab);
+      });
     });
 
     unitSelect.addEventListener("change", async () => {
@@ -1411,6 +1548,7 @@ PAGE_HTML = """<!doctype html>
     populateResolutionOptions();
     window.addEventListener("resize", refreshHistory);
     resetRuleForm();
+    setActiveAlertTab("rules");
     setLayoutEditEnabled(false);
     loadDashboardPreferences().then(refreshAll);
     setInterval(refreshAll, 5000);
@@ -1866,6 +2004,55 @@ def fetch_alert_rules() -> dict:
     }
 
 
+def fetch_alert_deliveries(limit: int = 50) -> dict:
+    if not DATABASE_PATH.exists():
+        return {"deliveries": []}
+
+    connection = open_readonly_connection()
+    if connection is None or not table_exists(connection, "alert_delivery_log"):
+        if connection is not None:
+            connection.close()
+        return {"deliveries": []}
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                timestamp_utc,
+                alert_timestamp_utc,
+                rule_id,
+                rule_name,
+                channel,
+                success,
+                detail
+            FROM alert_delivery_log
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return {
+        "deliveries": [
+            {
+                "id": row["id"],
+                "timestamp_utc": row["timestamp_utc"],
+                "alert_timestamp_utc": row["alert_timestamp_utc"],
+                "rule_id": row["rule_id"],
+                "rule_name": row["rule_name"],
+                "channel": row["channel"],
+                "success": bool(row["success"]),
+                "detail": row["detail"],
+                "sample_age": format_sample_age(row["timestamp_utc"]),
+            }
+            for row in rows
+        ]
+    }
+
+
 def parse_alert_rule_payload(payload: dict) -> AlertRule:
     rule = AlertRule(
         id=None,
@@ -2066,6 +2253,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/api/alert-rules":
             self.send_json_response(fetch_alert_rules())
+            return
+
+        if parsed_path.path == "/api/alert-deliveries":
+            self.send_json_response(fetch_alert_deliveries())
             return
 
         if parsed_path.path == "/api/dashboard-preferences":
