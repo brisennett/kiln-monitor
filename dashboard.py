@@ -112,7 +112,7 @@ PAGE_HTML = """<!doctype html>
     }
     .layout-shell {
       display: grid;
-      grid-template-columns: minmax(0, 1.85fr) minmax(280px, 0.95fr);
+      grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
       gap: 18px;
       align-items: start;
     }
@@ -225,13 +225,18 @@ PAGE_HTML = """<!doctype html>
       border: 1px solid var(--panel-border);
       border-radius: 16px;
       padding: 16px;
-      margin-top: 20px;
+      margin-top: 0;
     }
     .rules-grid {
       display: grid;
       gap: 12px;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      grid-template-columns: 1fr;
       margin-bottom: 16px;
+    }
+    .rules-table-wrap {
+      overflow-x: auto;
+      margin: 0 -4px;
+      padding: 0 4px;
     }
     label {
       display: block;
@@ -259,6 +264,7 @@ PAGE_HTML = """<!doctype html>
     table {
       width: 100%;
       border-collapse: collapse;
+      min-width: 640px;
     }
     th, td {
       text-align: left;
@@ -454,22 +460,24 @@ PAGE_HTML = """<!doctype html>
             <div id="ruleError" class="error-text"></div>
           </form>
 
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Threshold</th>
-                <th>Severity</th>
-                <th>Status</th>
-                <th>Last Triggered</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="rulesTableBody">
-              <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
-            </tbody>
-          </table>
+          <div class="rules-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Threshold</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Last Triggered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rulesTableBody">
+                <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
       </aside>
     </div>
