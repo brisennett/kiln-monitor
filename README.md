@@ -123,6 +123,9 @@ export KILN_MONITOR_SENSOR_MODEL=MAX31855
 export KILN_MONITOR_SPI_CS_PIN=D5
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 export KILN_MONITOR_MAX_SAMPLE_JUMP_C=50
+export KILN_MONITOR_WATCHDOG_FAULT_STREAK_THRESHOLD=5
+export KILN_MONITOR_WATCHDOG_STALE_DATA_SECONDS=30
+export KILN_MONITOR_WATCHDOG_NOTIFY_COOLDOWN_MINUTES=30
 export KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 python main.py
 ```
@@ -207,6 +210,8 @@ Supported rule types:
 
 Each rule can be named, enabled or disabled, assigned a severity, and given a reset gap (`hysteresis`) so it does not chatter when temperature hovers near the threshold.
 
+Each rule can also define a notification cooldown in minutes. Alert events still enter the log immediately, but repeated deliveries for the same rule, channel, and alert kind are suppressed until the cooldown expires.
+
 Each alert rule can also define its own accent color. When an alert rule is active, the dashboard uses the highest-priority active rule color for the trend line and card accents.
 
 Each rule can independently enable any combination of:
@@ -223,6 +228,24 @@ Channel delivery is controlled in two layers:
 Alert events are written to SQLite and shown in both `python status.py` and the local dashboard.
 
 Delivery attempts are also written to `alert_delivery_log`.
+
+## Built-In Watchdog Alerts
+
+The monitor also includes built-in watchdog alerts for system health conditions that are not tied to a user-defined temperature rule:
+
+- `WATCHDOG_FAULT_STREAK_TRIGGER` for repeated sensor read failures
+- `WATCHDOG_STALE_DATA_TRIGGER` when no successful temperature sample arrives for too long
+- matching `*_CLEAR` alerts when the condition recovers
+
+These watchdog alerts use the globally configured notification channels and have their own delivery cooldown.
+
+Useful watchdog settings:
+
+```bash
+export KILN_MONITOR_WATCHDOG_FAULT_STREAK_THRESHOLD=5
+export KILN_MONITOR_WATCHDOG_STALE_DATA_SECONDS=30
+export KILN_MONITOR_WATCHDOG_NOTIFY_COOLDOWN_MINUTES=30
+```
 
 Example environment variables:
 

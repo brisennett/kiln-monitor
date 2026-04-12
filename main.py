@@ -4,8 +4,9 @@ import argparse
 import signal
 import sys
 import time
+from datetime import datetime, timezone
 
-from alerts import evaluate_alert_rules
+from alerts import AlertEvent, AlertRule, evaluate_alert_rules
 from config import (
     APP_LOG_PATH,
     DATABASE_PATH,
@@ -16,6 +17,9 @@ from config import (
     SPI_CS_PIN,
     STATUS_EVERY_N_SAMPLES,
     THERMOCOUPLE_TYPE,
+    WATCHDOG_FAULT_STREAK_THRESHOLD,
+    WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
+    WATCHDOG_STALE_DATA_SECONDS,
 )
 from notifiers import NotificationError, build_enabled_notifiers, channels_for_rule
 from sensor import SensorReadError, TemperatureSample, build_sensor_reader
@@ -48,6 +52,25 @@ def persist_alerts(storage: SQLiteLogger, alerts, logger) -> None:
             storage.log_alert(alert)
         except Exception:
             logger.exception("failed to persist alert with level=%s kind=%s", alert.level, alert.kind)
+
+
+def build_watchdog_rule(rule_id: int, name: str) -> AlertRule:
+    return AlertRule(
+        id=rule_id,
+        name=name,
+        enabled=True,
+        rule_type="TARGET_REACHED",
+        threshold_f=0.0,
+        severity="CRITICAL",
+        hysteresis_f=0.0,
+        notify_cooldown_minutes=WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
+        color_hex="#ef4444",
+        notify_email=True,
+        notify_sms=True,
+        notify_push=True,
+        active=False,
+        last_triggered_at=None,
+    )
 
 
 def deliver_alerts(storage: SQLiteLogger, alerts, updated_rules, logger) -> None:
@@ -123,6 +146,70 @@ def deliver_alerts(storage: SQLiteLogger, alerts, updated_rules, logger) -> None
                 except Exception:
                     logger.exception("failed to log alert delivery failure for %s", channel)
                 logger.warning("alert delivery failed via %s: %s", channel, exc)
+
+
+def deliver_watchdog_alerts(storage: SQLiteLogger, alerts, logger) -> None:
+    if not alerts:
+        return
+
+    notifiers = build_enabled_notifiers()
+    for alert in alerts:
+        if alert.rule_id is None or alert.rule_name is None:
+            continue
+
+        rule = build_watchdog_rule(alert.rule_id, alert.rule_name)
+        for notifier in notifiers:
+            channel = notifier.channel_name
+            if storage.should_rate_limit_alert(
+                alert,
+                channel=channel,
+                cooldown_minutes=rule.notify_cooldown_minutes,
+            ):
+                detail = (
+                    f"suppressed by watchdog cooldown ({rule.notify_cooldown_minutes:.1f} min)"
+                )
+                try:
+                    storage.log_alert_delivery(
+                        alert,
+                        channel=channel,
+                        success=False,
+                        detail=detail,
+                    )
+                except Exception:
+                    logger.exception("failed to log watchdog rate-limited alert for %s", channel)
+                logger.info("watchdog alert skipped via %s: %s", channel, detail)
+                continue
+
+            try:
+                result = notifier.send(alert, rule)
+                storage.log_alert_delivery(
+                    alert,
+                    channel=result.channel,
+                    success=result.success,
+                    detail=result.detail,
+                )
+                logger.warning("watchdog alert delivered via %s: %s", result.channel, result.detail)
+            except NotificationError as exc:
+                try:
+                    storage.log_alert_delivery(
+                        alert,
+                        channel=channel,
+                        success=False,
+                        detail=str(exc),
+                    )
+                except Exception:
+                    logger.exception("failed to log watchdog delivery failure for %s", channel)
+                logger.warning("watchdog alert delivery failed via %s: %s", channel, exc)
+
+
+def emit_watchdog_alerts(storage: SQLiteLogger, alerts, logger) -> None:
+    if not alerts:
+        return
+    persist_alerts(storage, alerts, logger)
+    deliver_watchdog_alerts(storage, alerts, logger)
+    for alert in alerts:
+        logger.warning("watchdog %s: %s", alert.kind, alert.detail)
+        print(f"{alert.timestamp_utc} | WATCHDOG {alert.level} | {alert.detail}")
 
 
 def reject_unrealistic_jump(sample: TemperatureSample, previous_temp_c: float | None) -> None:
@@ -209,15 +296,50 @@ def run() -> int:
     previous_temp_c = None
     success_count = 0
     error_streak = 0
+    last_good_sample_at = datetime.now(timezone.utc)
+    watchdog_fault_active = False
+    watchdog_stale_active = False
 
     try:
         while not should_stop:
             loop_started = time.monotonic()
+            loop_completed_with_good_sample = False
 
             try:
                 sample = sensor.read_sample()
                 reject_unrealistic_jump(sample, previous_temp_c)
                 persist_sample(storage, sample, logger)
+                watchdog_alerts = []
+                if watchdog_fault_active:
+                    watchdog_alerts.append(
+                        AlertEvent(
+                            timestamp_utc=sample.timestamp.isoformat(),
+                            level="INFO",
+                            kind="WATCHDOG_FAULT_STREAK_CLEAR",
+                            detail=f"fault streak cleared after {error_streak} consecutive read error(s)",
+                            temp_c=sample.temp_c,
+                            temp_f=sample.temp_f,
+                            rule_id=-1,
+                            rule_name="Watchdog Fault Streak",
+                        )
+                    )
+                    watchdog_fault_active = False
+                if watchdog_stale_active:
+                    stale_age = (sample.timestamp - last_good_sample_at).total_seconds()
+                    watchdog_alerts.append(
+                        AlertEvent(
+                            timestamp_utc=sample.timestamp.isoformat(),
+                            level="INFO",
+                            kind="WATCHDOG_STALE_DATA_CLEAR",
+                            detail=f"stale data cleared after fresh sample arrived ({int(max(stale_age, 0))}s since last good sample)",
+                            temp_c=sample.temp_c,
+                            temp_f=sample.temp_f,
+                            rule_id=-2,
+                            rule_name="Watchdog Stale Data",
+                        )
+                    )
+                    watchdog_stale_active = False
+                emit_watchdog_alerts(storage, watchdog_alerts, logger)
                 alert_rules = storage.fetch_alert_rules()
                 alerts, updated_rules = evaluate_alert_rules(sample, alert_rules)
                 persist_alerts(storage, alerts, logger)
@@ -239,6 +361,8 @@ def run() -> int:
                     print(f"{alert.timestamp_utc} | ALERT {alert.level} | {alert.detail}")
                 error_streak = 0
                 success_count += 1
+                last_good_sample_at = sample.timestamp
+                loop_completed_with_good_sample = True
 
                 if success_count % STATUS_EVERY_N_SAMPLES == 0:
                     previous_temp_f = None
@@ -254,15 +378,59 @@ def run() -> int:
                 error_streak += 1
                 error_sample = build_error_sample(str(exc))
                 persist_sample(storage, error_sample, logger)
+                watchdog_alerts = []
+
+                if error_streak >= WATCHDOG_FAULT_STREAK_THRESHOLD and not watchdog_fault_active:
+                    watchdog_alerts.append(
+                        AlertEvent(
+                            timestamp_utc=error_sample.timestamp.isoformat(),
+                            level="CRITICAL",
+                            kind="WATCHDOG_FAULT_STREAK_TRIGGER",
+                            detail=(
+                                f"watchdog fault streak: {error_streak} consecutive sensor read "
+                                f"errors; last error: {exc}"
+                            ),
+                            temp_c=None,
+                            temp_f=None,
+                            rule_id=-1,
+                            rule_name="Watchdog Fault Streak",
+                        )
+                    )
+                    watchdog_fault_active = True
 
                 if error_streak >= ERROR_STREAK_WARNING_THRESHOLD:
                     logger.warning("sensor read error (%s consecutive): %s", error_streak, exc)
                 else:
                     logger.info("sensor read error: %s", exc)
 
+                emit_watchdog_alerts(storage, watchdog_alerts, logger)
                 print(f"{error_sample.timestamp.isoformat()} | ERROR | {exc}")
             except Exception:
                 logger.exception("unexpected runtime failure")
+
+            if not loop_completed_with_good_sample:
+                stale_age_seconds = (datetime.now(timezone.utc) - last_good_sample_at).total_seconds()
+                if stale_age_seconds >= WATCHDOG_STALE_DATA_SECONDS and not watchdog_stale_active:
+                    watchdog_stale_active = True
+                    emit_watchdog_alerts(
+                        storage,
+                        [
+                            AlertEvent(
+                                timestamp_utc=datetime.now(timezone.utc).isoformat(),
+                                level="CRITICAL",
+                                kind="WATCHDOG_STALE_DATA_TRIGGER",
+                                detail=(
+                                    f"watchdog stale data: no successful temperature sample "
+                                    f"for {int(stale_age_seconds)} seconds"
+                                ),
+                                temp_c=None,
+                                temp_f=None,
+                                rule_id=-2,
+                                rule_name="Watchdog Stale Data",
+                            )
+                        ],
+                        logger,
+                    )
 
             elapsed = time.monotonic() - loop_started
             sleep_for = max(0.0, READ_INTERVAL_SECONDS - elapsed)

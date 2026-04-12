@@ -22,6 +22,13 @@ MAX_SAMPLE_JUMP_C = float(os.getenv("KILN_MONITOR_MAX_SAMPLE_JUMP_C", "50.0"))
 # Consecutive read failures before the monitor increases log severity.
 ERROR_STREAK_WARNING_THRESHOLD = int(os.getenv("KILN_MONITOR_ERROR_STREAK_WARNING_THRESHOLD", "3"))
 
+# Watchdog thresholds for appliance-style health alerts. These generate
+# built-in alerts when the monitor is alive but sensor health or data freshness
+# has gone bad for longer than expected.
+WATCHDOG_FAULT_STREAK_THRESHOLD = int(os.getenv("KILN_MONITOR_WATCHDOG_FAULT_STREAK_THRESHOLD", "5"))
+WATCHDOG_STALE_DATA_SECONDS = float(os.getenv("KILN_MONITOR_WATCHDOG_STALE_DATA_SECONDS", "30"))
+WATCHDOG_NOTIFY_COOLDOWN_MINUTES = float(os.getenv("KILN_MONITOR_WATCHDOG_NOTIFY_COOLDOWN_MINUTES", "30"))
+
 # Sensor front-end model. Use MAX31855 for the replacement board or MAX31856
 # for the original thermocouple amplifier board.
 SENSOR_MODEL = os.getenv("KILN_MONITOR_SENSOR_MODEL", "MAX31855").upper()
