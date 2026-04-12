@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 from alerts import AlertEvent, AlertRule, validate_rule
 from config import DATABASE_PATH
-from notifiers import NotificationError, build_enabled_notifiers
+from notifiers import NotificationError, build_enabled_notifiers, default_alert_channel_settings, load_alert_channel_settings
 from storage.sqlite_logger import SQLiteLogger
 
 
@@ -327,6 +327,28 @@ PAGE_HTML = """<!doctype html>
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .channel-sections {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .channel-section {
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .channel-section-title {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .channel-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 12px;
+    }
     .test-actions {
       display: flex;
       gap: 8px;
@@ -345,6 +367,10 @@ PAGE_HTML = """<!doctype html>
     }
     .pill-warning {
       background: #7c2d12;
+    }
+    .success-text {
+      color: #86efac;
+      min-height: 1.2em;
     }
     label {
       display: block;
@@ -546,11 +572,12 @@ PAGE_HTML = """<!doctype html>
           </div>
 
           <div class="tab-strip" role="tablist" aria-label="Alerting tabs">
-            <button type="button" class="tab-button" data-alert-tab="log" role="tab" aria-selected="false">Alert Log</button>
-            <button type="button" class="tab-button active" data-alert-tab="setup" role="tab" aria-selected="true">Alert Setup</button>
+            <button type="button" class="tab-button active" data-alert-tab="rules" role="tab" aria-selected="true">Rules</button>
+            <button type="button" class="tab-button" data-alert-tab="channels" role="tab" aria-selected="false">Channel Setup</button>
+            <button type="button" class="tab-button" data-alert-tab="log" role="tab" aria-selected="false">Message Log</button>
           </div>
 
-          <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="setup">
+          <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="rules">
             <form id="ruleForm">
               <div class="rules-grid">
                 <div>
@@ -641,17 +668,111 @@ PAGE_HTML = """<!doctype html>
             </div>
           </section>
 
-          <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="log" hidden>
-            <div class="tab-panel-header">
-              <div>
-                <div class="label">Alert Log</div>
-                <div class="delivery-summary" id="deliveriesSummary">Checking recent alert activity and delivery attempts...</div>
-              </div>
-            </div>
-
+          <section id="alertChannelsTab" class="tab-panel" data-alert-tab-panel="channels" hidden>
             <div class="channel-health" id="channelHealth">
               <span class="pill">Loading channels...</span>
             </div>
+
+            <div class="channel-sections">
+              <section class="channel-section">
+                <h3 class="channel-section-title">Email</h3>
+                <div class="subtle">SMTP settings for alert emails.</div>
+                <div class="channel-grid">
+                  <div>
+                    <label for="emailEnabled">Enabled</label>
+                    <select id="emailEnabled">
+                      <option value="true">Enabled</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="emailSmtpHost">SMTP Host</label>
+                    <input id="emailSmtpHost" type="text" placeholder="smtp.example.com" />
+                  </div>
+                  <div>
+                    <label for="emailSmtpPort">SMTP Port</label>
+                    <input id="emailSmtpPort" type="number" step="1" placeholder="587" />
+                  </div>
+                  <div>
+                    <label for="emailStarttls">STARTTLS</label>
+                    <select id="emailStarttls">
+                      <option value="true">Enabled</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="emailUsername">Username</label>
+                    <input id="emailUsername" type="text" />
+                  </div>
+                  <div>
+                    <label for="emailPassword">Password</label>
+                    <input id="emailPassword" type="password" />
+                  </div>
+                  <div>
+                    <label for="emailFromAddr">From</label>
+                    <input id="emailFromAddr" type="text" placeholder="kiln@example.com" />
+                  </div>
+                  <div>
+                    <label for="emailToAddr">To</label>
+                    <input id="emailToAddr" type="text" placeholder="you@example.com" />
+                  </div>
+                </div>
+              </section>
+
+              <section class="channel-section">
+                <h3 class="channel-section-title">SMS</h3>
+                <div class="subtle">Twilio settings for text alerts.</div>
+                <div class="channel-grid">
+                  <div>
+                    <label for="smsEnabled">Enabled</label>
+                    <select id="smsEnabled">
+                      <option value="true">Enabled</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="smsAccountSid">Account SID</label>
+                    <input id="smsAccountSid" type="text" />
+                  </div>
+                  <div>
+                    <label for="smsAuthToken">Auth Token</label>
+                    <input id="smsAuthToken" type="password" />
+                  </div>
+                  <div>
+                    <label for="smsFromNumber">From Number</label>
+                    <input id="smsFromNumber" type="text" placeholder="+15551234567" />
+                  </div>
+                  <div>
+                    <label for="smsToNumber">To Number</label>
+                    <input id="smsToNumber" type="text" placeholder="+15557654321" />
+                  </div>
+                </div>
+              </section>
+
+              <section class="channel-section">
+                <h3 class="channel-section-title">Push</h3>
+                <div class="subtle">Generic webhook endpoint for push integrations.</div>
+                <div class="channel-grid">
+                  <div>
+                    <label for="pushEnabled">Enabled</label>
+                    <select id="pushEnabled">
+                      <option value="true">Enabled</option>
+                      <option value="false">Disabled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="pushWebhookUrl">Webhook URL</label>
+                    <input id="pushWebhookUrl" type="text" placeholder="https://example.com/hook" />
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="rule-actions">
+              <button type="button" id="saveChannelSettingsButton">Save Channel Settings</button>
+              <button type="button" id="resetChannelSettingsButton">Reload Saved Settings</button>
+            </div>
+            <div id="channelSettingsStatus" class="success-text"></div>
 
             <div class="test-actions">
               <button type="button" id="sendTestEmailButton">Send Test Email</button>
@@ -660,6 +781,15 @@ PAGE_HTML = """<!doctype html>
               <button type="button" id="sendTestAllButton">Send All Configured</button>
             </div>
             <div class="subtle test-status" id="testAlertStatus"></div>
+          </section>
+
+          <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="log" hidden>
+            <div class="tab-panel-header">
+              <div>
+                <div class="label">Alert Log</div>
+                <div class="delivery-summary" id="deliveriesSummary">Checking recent alert activity and delivery attempts...</div>
+              </div>
+            </div>
 
             <div class="rules-table-wrap">
               <table>
@@ -733,6 +863,24 @@ PAGE_HTML = """<!doctype html>
     const deliveriesTableBody = document.getElementById("deliveriesTableBody");
     const deliveriesSummary = document.getElementById("deliveriesSummary");
     const channelHealth = document.getElementById("channelHealth");
+    const emailEnabled = document.getElementById("emailEnabled");
+    const emailSmtpHost = document.getElementById("emailSmtpHost");
+    const emailSmtpPort = document.getElementById("emailSmtpPort");
+    const emailStarttls = document.getElementById("emailStarttls");
+    const emailUsername = document.getElementById("emailUsername");
+    const emailPassword = document.getElementById("emailPassword");
+    const emailFromAddr = document.getElementById("emailFromAddr");
+    const emailToAddr = document.getElementById("emailToAddr");
+    const smsEnabled = document.getElementById("smsEnabled");
+    const smsAccountSid = document.getElementById("smsAccountSid");
+    const smsAuthToken = document.getElementById("smsAuthToken");
+    const smsFromNumber = document.getElementById("smsFromNumber");
+    const smsToNumber = document.getElementById("smsToNumber");
+    const pushEnabled = document.getElementById("pushEnabled");
+    const pushWebhookUrl = document.getElementById("pushWebhookUrl");
+    const saveChannelSettingsButton = document.getElementById("saveChannelSettingsButton");
+    const resetChannelSettingsButton = document.getElementById("resetChannelSettingsButton");
+    const channelSettingsStatus = document.getElementById("channelSettingsStatus");
     const testAlertStatus = document.getElementById("testAlertStatus");
     const sendTestEmailButton = document.getElementById("sendTestEmailButton");
     const sendTestSmsButton = document.getElementById("sendTestSmsButton");
@@ -770,6 +918,7 @@ PAGE_HTML = """<!doctype html>
     let currentRules = [];
     let currentDeliveries = [];
     let alertChannelStatus = {};
+    let alertChannelSettings = {};
     let chartState = {
       points: [],
       plotPoints: [],
@@ -804,6 +953,57 @@ PAGE_HTML = """<!doctype html>
       sendTestSmsButton.disabled = !alertChannelStatus.SMS;
       sendTestPushButton.disabled = !alertChannelStatus.PUSH;
       sendTestAllButton.disabled = !Object.values(alertChannelStatus).some(Boolean);
+    }
+
+    function populateChannelSettingsForm(settings) {
+      alertChannelSettings = settings || {};
+      const email = alertChannelSettings.email || {};
+      const sms = alertChannelSettings.sms || {};
+      const push = alertChannelSettings.push || {};
+
+      emailEnabled.value = String(Boolean(email.enabled));
+      emailSmtpHost.value = email.smtp_host || "";
+      emailSmtpPort.value = email.smtp_port ?? 587;
+      emailStarttls.value = String(Boolean(email.starttls));
+      emailUsername.value = email.username || "";
+      emailPassword.value = email.password || "";
+      emailFromAddr.value = email.from_addr || "";
+      emailToAddr.value = email.to_addr || "";
+
+      smsEnabled.value = String(Boolean(sms.enabled));
+      smsAccountSid.value = sms.account_sid || "";
+      smsAuthToken.value = sms.auth_token || "";
+      smsFromNumber.value = sms.from_number || "";
+      smsToNumber.value = sms.to_number || "";
+
+      pushEnabled.value = String(Boolean(push.enabled));
+      pushWebhookUrl.value = push.webhook_url || "";
+    }
+
+    function gatherChannelSettings() {
+      return {
+        email: {
+          enabled: emailEnabled.value === "true",
+          smtp_host: emailSmtpHost.value.trim(),
+          smtp_port: Number(emailSmtpPort.value || "587"),
+          starttls: emailStarttls.value === "true",
+          username: emailUsername.value.trim(),
+          password: emailPassword.value,
+          from_addr: emailFromAddr.value.trim(),
+          to_addr: emailToAddr.value.trim(),
+        },
+        sms: {
+          enabled: smsEnabled.value === "true",
+          account_sid: smsAccountSid.value.trim(),
+          auth_token: smsAuthToken.value,
+          from_number: smsFromNumber.value.trim(),
+          to_number: smsToNumber.value.trim(),
+        },
+        push: {
+          enabled: pushEnabled.value === "true",
+          webhook_url: pushWebhookUrl.value.trim(),
+        },
+      };
     }
 
     function formatTimestamp(isoText) {
@@ -1522,6 +1722,30 @@ PAGE_HTML = """<!doctype html>
       renderChannelHealth();
     }
 
+    async function refreshAlertChannelSettings() {
+      const response = await fetch("/api/alert-channel-settings");
+      const payload = await response.json();
+      populateChannelSettingsForm(payload.settings || {});
+    }
+
+    async function saveAlertChannelSettings() {
+      channelSettingsStatus.textContent = "Saving channel settings...";
+      const response = await fetch("/api/alert-channel-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: gatherChannelSettings() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        channelSettingsStatus.textContent = payload.error || "Failed to save channel settings.";
+        return;
+      }
+
+      populateChannelSettingsForm(payload.settings || {});
+      channelSettingsStatus.textContent = "Channel settings saved.";
+      await refreshAlertChannels();
+    }
+
     async function sendTestAlert(channels) {
       testAlertStatus.textContent = "Sending test alert...";
       const response = await fetch("/api/test-alert", {
@@ -1619,6 +1843,16 @@ PAGE_HTML = """<!doctype html>
       await sendTestAlert(channels);
     });
 
+    saveChannelSettingsButton.addEventListener("click", async () => {
+      await saveAlertChannelSettings();
+    });
+
+    resetChannelSettingsButton.addEventListener("click", async () => {
+      channelSettingsStatus.textContent = "Reloading saved settings...";
+      await refreshAlertChannelSettings();
+      channelSettingsStatus.textContent = "Saved settings reloaded.";
+    });
+
     unitSelect.addEventListener("change", async () => {
       selectedUnit = unitSelect.value;
       updateRuleUnitLabels();
@@ -1634,6 +1868,9 @@ PAGE_HTML = """<!doctype html>
     });
 
     layoutToggle.addEventListener("click", () => {
+      if (!setupModal.hidden) {
+        setSetupModalOpen(false);
+      }
       setLayoutEditEnabled(!layoutEditEnabled);
     });
 
@@ -1734,10 +1971,13 @@ PAGE_HTML = """<!doctype html>
     populateResolutionOptions();
     window.addEventListener("resize", refreshHistory);
     resetRuleForm();
-    setActiveAlertTab("setup");
+    setActiveAlertTab("rules");
     setSetupModalOpen(false);
     setLayoutEditEnabled(false);
-    loadDashboardPreferences().then(refreshAll);
+    loadDashboardPreferences().then(async () => {
+      await refreshAlertChannelSettings();
+      await refreshAll();
+    });
     setInterval(refreshAll, 5000);
   </script>
 </body>
@@ -2009,6 +2249,58 @@ def update_dashboard_preferences(payload: dict) -> dict:
         connection.close()
 
     return {"ok": True}
+
+
+def fetch_alert_channel_settings() -> dict:
+    settings = load_alert_channel_settings()
+    return {"settings": settings}
+
+
+def update_alert_channel_settings(payload: dict) -> dict:
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError("settings must be an object")
+
+    base = default_alert_channel_settings()
+
+    normalized_email = settings.get("email", {})
+    normalized_sms = settings.get("sms", {})
+    normalized_push = settings.get("push", {})
+    if not isinstance(normalized_email, dict) or not isinstance(normalized_sms, dict) or not isinstance(normalized_push, dict):
+        raise ValueError("email, sms, and push settings must be objects")
+
+    merged = {
+        "email": {
+            "enabled": bool(normalized_email.get("enabled", base["email"]["enabled"])),
+            "smtp_host": str(normalized_email.get("smtp_host", base["email"]["smtp_host"])).strip(),
+            "smtp_port": int(normalized_email.get("smtp_port", base["email"]["smtp_port"])),
+            "starttls": bool(normalized_email.get("starttls", base["email"]["starttls"])),
+            "username": str(normalized_email.get("username", base["email"]["username"])).strip(),
+            "password": str(normalized_email.get("password", base["email"]["password"])).strip(),
+            "from_addr": str(normalized_email.get("from_addr", base["email"]["from_addr"])).strip(),
+            "to_addr": str(normalized_email.get("to_addr", base["email"]["to_addr"])).strip(),
+        },
+        "sms": {
+            "enabled": bool(normalized_sms.get("enabled", base["sms"]["enabled"])),
+            "account_sid": str(normalized_sms.get("account_sid", base["sms"]["account_sid"])).strip(),
+            "auth_token": str(normalized_sms.get("auth_token", base["sms"]["auth_token"])).strip(),
+            "from_number": str(normalized_sms.get("from_number", base["sms"]["from_number"])).strip(),
+            "to_number": str(normalized_sms.get("to_number", base["sms"]["to_number"])).strip(),
+        },
+        "push": {
+            "enabled": bool(normalized_push.get("enabled", base["push"]["enabled"])),
+            "webhook_url": str(normalized_push.get("webhook_url", base["push"]["webhook_url"])).strip(),
+        },
+    }
+
+    connection = open_readwrite_connection()
+    try:
+        set_dashboard_state_value(connection, "alert_channel_settings", json.dumps(merged))
+        connection.commit()
+    finally:
+        connection.close()
+
+    return {"ok": True, "settings": merged}
 
 
 def fetch_history(window_name: str) -> dict:
@@ -2548,6 +2840,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(fetch_alert_channel_status())
             return
 
+        if parsed_path.path == "/api/alert-channel-settings":
+            self.send_json_response(fetch_alert_channel_settings())
+            return
+
         if parsed_path.path == "/api/dashboard-preferences":
             self.send_json_response(fetch_dashboard_preferences())
             return
@@ -2572,6 +2868,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             if parsed_path.path == "/api/dashboard-preferences":
                 self.send_json_response(update_dashboard_preferences(payload))
+                return
+
+            if parsed_path.path == "/api/alert-channel-settings":
+                self.send_json_response(update_alert_channel_settings(payload))
                 return
 
             if parsed_path.path == "/api/reset-faults":

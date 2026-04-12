@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import smtplib
+import sqlite3
 from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Protocol
@@ -25,6 +26,7 @@ from config import (
     ALERT_TWILIO_ACCOUNT_SID,
     ALERT_TWILIO_AUTH_TOKEN,
     ALERT_TWILIO_FROM,
+    DATABASE_PATH,
 )
 
 
@@ -49,11 +51,83 @@ class Notifier(Protocol):
         ...
 
 
+def _merge_dict(base: dict, overrides: dict) -> dict:
+    merged = dict(base)
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            merged[key] = _merge_dict(base[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def default_alert_channel_settings() -> dict:
+    return {
+        "email": {
+            "enabled": ALERT_EMAIL_ENABLED,
+            "smtp_host": ALERT_EMAIL_SMTP_HOST,
+            "smtp_port": ALERT_EMAIL_SMTP_PORT,
+            "starttls": ALERT_EMAIL_SMTP_STARTTLS,
+            "username": ALERT_EMAIL_SMTP_USERNAME,
+            "password": ALERT_EMAIL_SMTP_PASSWORD,
+            "from_addr": ALERT_EMAIL_FROM,
+            "to_addr": ALERT_EMAIL_TO,
+        },
+        "sms": {
+            "enabled": ALERT_SMS_ENABLED,
+            "account_sid": ALERT_TWILIO_ACCOUNT_SID,
+            "auth_token": ALERT_TWILIO_AUTH_TOKEN,
+            "from_number": ALERT_TWILIO_FROM,
+            "to_number": ALERT_SMS_TO,
+        },
+        "push": {
+            "enabled": ALERT_PUSH_ENABLED,
+            "webhook_url": ALERT_PUSH_WEBHOOK_URL,
+        },
+    }
+
+
+def load_alert_channel_settings() -> dict:
+    settings = default_alert_channel_settings()
+    if not DATABASE_PATH.exists():
+        return settings
+
+    connection = sqlite3.connect(DATABASE_PATH)
+    try:
+        connection.row_factory = sqlite3.Row
+        table_row = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'dashboard_state'
+            """
+        ).fetchone()
+        if table_row is None:
+            return settings
+
+        row = connection.execute(
+            "SELECT value FROM dashboard_state WHERE key = ?",
+            ("alert_channel_settings",),
+        ).fetchone()
+        if row is None or not row["value"]:
+            return settings
+
+        stored = json.loads(row["value"])
+        if not isinstance(stored, dict):
+            return settings
+        return _merge_dict(settings, stored)
+    except (sqlite3.Error, json.JSONDecodeError):
+        return settings
+    finally:
+        connection.close()
+
+
 def build_enabled_notifiers() -> list[Notifier]:
+    settings = load_alert_channel_settings()
     notifiers: list[Notifier] = [
-        EmailNotifier(),
-        TwilioSmsNotifier(),
-        WebhookPushNotifier(),
+        EmailNotifier(settings["email"]),
+        TwilioSmsNotifier(settings["sms"]),
+        WebhookPushNotifier(settings["push"]),
     ]
     return [notifier for notifier in notifiers if notifier.is_enabled()]
 
@@ -72,12 +146,15 @@ def channels_for_rule(rule: AlertRule) -> list[str]:
 class EmailNotifier:
     channel_name = "EMAIL"
 
+    def __init__(self, settings: dict | None = None) -> None:
+        self.settings = settings or load_alert_channel_settings()["email"]
+
     def is_enabled(self) -> bool:
         return (
-            ALERT_EMAIL_ENABLED
-            and bool(ALERT_EMAIL_SMTP_HOST)
-            and bool(ALERT_EMAIL_FROM)
-            and bool(ALERT_EMAIL_TO)
+            bool(self.settings.get("enabled"))
+            and bool(self.settings.get("smtp_host"))
+            and bool(self.settings.get("from_addr"))
+            and bool(self.settings.get("to_addr"))
         )
 
     def send(self, alert: AlertEvent, rule: AlertRule) -> DeliveryResult:
@@ -86,8 +163,8 @@ class EmailNotifier:
 
         message = EmailMessage()
         message["Subject"] = f"[Kiln] {alert.level} {rule.name}"
-        message["From"] = ALERT_EMAIL_FROM
-        message["To"] = ALERT_EMAIL_TO
+        message["From"] = self.settings["from_addr"]
+        message["To"] = self.settings["to_addr"]
         message.set_content(
             "\n".join(
                 [
@@ -101,28 +178,31 @@ class EmailNotifier:
         )
 
         try:
-            with smtplib.SMTP(ALERT_EMAIL_SMTP_HOST, ALERT_EMAIL_SMTP_PORT, timeout=10) as smtp:
-                if ALERT_EMAIL_SMTP_STARTTLS:
+            with smtplib.SMTP(self.settings["smtp_host"], int(self.settings["smtp_port"]), timeout=10) as smtp:
+                if self.settings.get("starttls"):
                     smtp.starttls()
-                if ALERT_EMAIL_SMTP_USERNAME:
-                    smtp.login(ALERT_EMAIL_SMTP_USERNAME, ALERT_EMAIL_SMTP_PASSWORD)
+                if self.settings.get("username"):
+                    smtp.login(self.settings["username"], self.settings.get("password", ""))
                 smtp.send_message(message)
         except Exception as exc:
             raise NotificationError(f"email delivery failed: {exc}") from exc
 
-        return DeliveryResult(channel=self.channel_name, success=True, detail=f"sent to {ALERT_EMAIL_TO}")
+        return DeliveryResult(channel=self.channel_name, success=True, detail=f"sent to {self.settings['to_addr']}")
 
 
 class TwilioSmsNotifier:
     channel_name = "SMS"
 
+    def __init__(self, settings: dict | None = None) -> None:
+        self.settings = settings or load_alert_channel_settings()["sms"]
+
     def is_enabled(self) -> bool:
         return (
-            ALERT_SMS_ENABLED
-            and bool(ALERT_TWILIO_ACCOUNT_SID)
-            and bool(ALERT_TWILIO_AUTH_TOKEN)
-            and bool(ALERT_TWILIO_FROM)
-            and bool(ALERT_SMS_TO)
+            bool(self.settings.get("enabled"))
+            and bool(self.settings.get("account_sid"))
+            and bool(self.settings.get("auth_token"))
+            and bool(self.settings.get("from_number"))
+            and bool(self.settings.get("to_number"))
         )
 
     def send(self, alert: AlertEvent, rule: AlertRule) -> DeliveryResult:
@@ -132,17 +212,17 @@ class TwilioSmsNotifier:
         body_text = f"[{alert.level}] {rule.name}: {alert.detail}"
         endpoint = (
             f"https://api.twilio.com/2010-04-01/Accounts/"
-            f"{ALERT_TWILIO_ACCOUNT_SID}/Messages.json"
+            f"{self.settings['account_sid']}/Messages.json"
         )
         form_body = parse.urlencode(
             {
-                "From": ALERT_TWILIO_FROM,
-                "To": ALERT_SMS_TO,
+                "From": self.settings["from_number"],
+                "To": self.settings["to_number"],
                 "Body": body_text,
             }
         ).encode("utf-8")
         auth_token = base64.b64encode(
-            f"{ALERT_TWILIO_ACCOUNT_SID}:{ALERT_TWILIO_AUTH_TOKEN}".encode("utf-8")
+            f"{self.settings['account_sid']}:{self.settings['auth_token']}".encode("utf-8")
         ).decode("ascii")
         request_obj = request.Request(
             endpoint,
@@ -164,14 +244,17 @@ class TwilioSmsNotifier:
         except Exception as exc:
             raise NotificationError(f"twilio sms failed: {exc}") from exc
 
-        return DeliveryResult(channel=self.channel_name, success=True, detail=f"sent to {ALERT_SMS_TO}")
+        return DeliveryResult(channel=self.channel_name, success=True, detail=f"sent to {self.settings['to_number']}")
 
 
 class WebhookPushNotifier:
     channel_name = "PUSH"
 
+    def __init__(self, settings: dict | None = None) -> None:
+        self.settings = settings or load_alert_channel_settings()["push"]
+
     def is_enabled(self) -> bool:
-        return ALERT_PUSH_ENABLED and bool(ALERT_PUSH_WEBHOOK_URL)
+        return bool(self.settings.get("enabled")) and bool(self.settings.get("webhook_url"))
 
     def send(self, alert: AlertEvent, rule: AlertRule) -> DeliveryResult:
         if not self.is_enabled():
@@ -189,7 +272,7 @@ class WebhookPushNotifier:
             }
         ).encode("utf-8")
         request_obj = request.Request(
-            ALERT_PUSH_WEBHOOK_URL,
+            self.settings["webhook_url"],
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
