@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import sqlite3
 from pathlib import Path
 
 
@@ -75,3 +77,43 @@ ALERT_SMS_TO = os.getenv("KILN_MONITOR_ALERT_SMS_TO", "")
 
 ALERT_PUSH_ENABLED = os.getenv("KILN_MONITOR_ALERT_PUSH_ENABLED", "false").lower() == "true"
 ALERT_PUSH_WEBHOOK_URL = os.getenv("KILN_MONITOR_ALERT_PUSH_WEBHOOK_URL", "")
+
+
+def load_watchdog_settings() -> dict:
+    settings = {
+        "fault_streak_threshold": WATCHDOG_FAULT_STREAK_THRESHOLD,
+        "stale_data_seconds": WATCHDOG_STALE_DATA_SECONDS,
+        "notify_cooldown_minutes": WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
+    }
+    if not DATABASE_PATH.exists():
+        return settings
+
+    connection = sqlite3.connect(DATABASE_PATH)
+    try:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT value
+            FROM dashboard_state
+            WHERE key = ?
+            """,
+            ("watchdog_settings",),
+        ).fetchone()
+        if row is None or not row["value"]:
+            return settings
+
+        payload = json.loads(row["value"])
+        if not isinstance(payload, dict):
+            return settings
+
+        if "fault_streak_threshold" in payload:
+            settings["fault_streak_threshold"] = int(payload["fault_streak_threshold"])
+        if "stale_data_seconds" in payload:
+            settings["stale_data_seconds"] = float(payload["stale_data_seconds"])
+        if "notify_cooldown_minutes" in payload:
+            settings["notify_cooldown_minutes"] = float(payload["notify_cooldown_minutes"])
+        return settings
+    except (sqlite3.Error, json.JSONDecodeError, ValueError, TypeError):
+        return settings
+    finally:
+        connection.close()

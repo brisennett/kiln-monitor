@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from alerts import AlertEvent, AlertRule, validate_rule
-from config import DATABASE_PATH
+from config import DATABASE_PATH, WATCHDOG_FAULT_STREAK_THRESHOLD, WATCHDOG_NOTIFY_COOLDOWN_MINUTES, WATCHDOG_STALE_DATA_SECONDS
 from notifiers import NotificationError, build_enabled_notifiers, default_alert_channel_settings, load_alert_channel_settings
 from storage.sqlite_logger import SQLiteLogger
 
@@ -404,6 +404,12 @@ PAGE_HTML = """<!doctype html>
       color: #86efac;
       min-height: 1.2em;
     }
+    .watchdog-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 12px;
+    }
     label {
       display: block;
       color: #9ca3af;
@@ -606,6 +612,7 @@ PAGE_HTML = """<!doctype html>
           <div class="tab-strip" role="tablist" aria-label="Alerting tabs">
             <button type="button" class="tab-button active" data-alert-tab="rules" role="tab" aria-selected="true">Rules</button>
             <button type="button" class="tab-button" data-alert-tab="channels" role="tab" aria-selected="false">Channel Setup</button>
+            <button type="button" class="tab-button" data-alert-tab="watchdog" role="tab" aria-selected="false">Watchdog</button>
             <button type="button" class="tab-button" data-alert-tab="log" role="tab" aria-selected="false">Message Log</button>
           </div>
 
@@ -816,6 +823,40 @@ PAGE_HTML = """<!doctype html>
             <div class="subtle test-status" id="testAlertStatus"></div>
           </section>
 
+          <section id="alertWatchdogTab" class="tab-panel" data-alert-tab-panel="watchdog" hidden>
+            <div class="channel-toolbar">
+              <button type="button" id="saveWatchdogSettingsButton">Save Watchdog Settings</button>
+              <button type="button" id="resetWatchdogSettingsButton">Reload Saved Settings</button>
+            </div>
+            <div id="watchdogSettingsStatus" class="success-text"></div>
+
+            <hr class="panel-divider" />
+
+            <div class="subtle">
+              Built-in watchdog alerts cover monitor health conditions such as repeated sensor faults and stale data, even when no user-defined temperature rule has fired.
+            </div>
+            <div class="subtle">
+              Changes here take effect after restarting the `kiln-monitor` service.
+            </div>
+
+            <hr class="panel-divider" />
+
+            <div class="watchdog-grid">
+              <div>
+                <label for="watchdogFaultStreakThreshold">Fault Streak Threshold</label>
+                <input id="watchdogFaultStreakThreshold" type="number" min="1" step="1" />
+              </div>
+              <div>
+                <label for="watchdogStaleDataSeconds">Stale Data Seconds</label>
+                <input id="watchdogStaleDataSeconds" type="number" min="1" step="1" />
+              </div>
+              <div>
+                <label for="watchdogCooldownMinutes">Cooldown Minutes</label>
+                <input id="watchdogCooldownMinutes" type="number" min="0" step="0.1" />
+              </div>
+            </div>
+          </section>
+
           <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="log" hidden>
             <div class="tab-panel-header">
               <div>
@@ -915,6 +956,12 @@ PAGE_HTML = """<!doctype html>
     const resetChannelSettingsButton = document.getElementById("resetChannelSettingsButton");
     const channelSettingsStatus = document.getElementById("channelSettingsStatus");
     const testAlertStatus = document.getElementById("testAlertStatus");
+    const watchdogFaultStreakThreshold = document.getElementById("watchdogFaultStreakThreshold");
+    const watchdogStaleDataSeconds = document.getElementById("watchdogStaleDataSeconds");
+    const watchdogCooldownMinutes = document.getElementById("watchdogCooldownMinutes");
+    const saveWatchdogSettingsButton = document.getElementById("saveWatchdogSettingsButton");
+    const resetWatchdogSettingsButton = document.getElementById("resetWatchdogSettingsButton");
+    const watchdogSettingsStatus = document.getElementById("watchdogSettingsStatus");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const sidebarZone = document.getElementById("sidebarZone");
@@ -948,6 +995,7 @@ PAGE_HTML = """<!doctype html>
     let currentDeliveries = [];
     let alertChannelStatus = {};
     let alertChannelSettings = {};
+    let watchdogSettings = {};
     let chartState = {
       points: [],
       plotPoints: [],
@@ -1046,6 +1094,21 @@ PAGE_HTML = """<!doctype html>
           enabled: pushEnabled.value === "true",
           webhook_url: pushWebhookUrl.value.trim(),
         },
+      };
+    }
+
+    function populateWatchdogSettingsForm(settings) {
+      watchdogSettings = settings || {};
+      watchdogFaultStreakThreshold.value = watchdogSettings.fault_streak_threshold ?? 5;
+      watchdogStaleDataSeconds.value = watchdogSettings.stale_data_seconds ?? 30;
+      watchdogCooldownMinutes.value = watchdogSettings.notify_cooldown_minutes ?? 30;
+    }
+
+    function gatherWatchdogSettings() {
+      return {
+        fault_streak_threshold: Number(watchdogFaultStreakThreshold.value || "5"),
+        stale_data_seconds: Number(watchdogStaleDataSeconds.value || "30"),
+        notify_cooldown_minutes: Number(watchdogCooldownMinutes.value || "30"),
       };
     }
 
@@ -1791,6 +1854,29 @@ PAGE_HTML = """<!doctype html>
       await refreshAlertChannels();
     }
 
+    async function refreshWatchdogSettings() {
+      const response = await fetch("/api/watchdog-settings");
+      const payload = await response.json();
+      populateWatchdogSettingsForm(payload.settings || {});
+    }
+
+    async function saveWatchdogSettings() {
+      watchdogSettingsStatus.textContent = "Saving watchdog settings...";
+      const response = await fetch("/api/watchdog-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: gatherWatchdogSettings() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        watchdogSettingsStatus.textContent = payload.error || "Failed to save watchdog settings.";
+        return;
+      }
+
+      populateWatchdogSettingsForm(payload.settings || {});
+      watchdogSettingsStatus.textContent = "Watchdog settings saved.";
+    }
+
     async function sendTestAlert(channels) {
       testAlertStatus.textContent = "Sending test alert...";
       const response = await fetch("/api/test-alert", {
@@ -1877,6 +1963,16 @@ PAGE_HTML = """<!doctype html>
       channelSettingsStatus.textContent = "Reloading saved settings...";
       await refreshAlertChannelSettings();
       channelSettingsStatus.textContent = "Saved settings reloaded.";
+    });
+
+    saveWatchdogSettingsButton.addEventListener("click", async () => {
+      await saveWatchdogSettings();
+    });
+
+    resetWatchdogSettingsButton.addEventListener("click", async () => {
+      watchdogSettingsStatus.textContent = "Reloading saved settings...";
+      await refreshWatchdogSettings();
+      watchdogSettingsStatus.textContent = "Saved settings reloaded.";
     });
 
     unitSelect.addEventListener("change", async () => {
@@ -2003,6 +2099,7 @@ PAGE_HTML = """<!doctype html>
     setLayoutEditEnabled(false);
     loadDashboardPreferences().then(async () => {
       await refreshAlertChannelSettings();
+      await refreshWatchdogSettings();
       await refreshAll();
     });
     setInterval(refreshAll, 5000);
@@ -2333,6 +2430,61 @@ def update_alert_channel_settings(payload: dict) -> dict:
         connection.close()
 
     return {"ok": True, "settings": merged}
+
+
+def default_watchdog_settings() -> dict:
+    return {
+        "fault_streak_threshold": WATCHDOG_FAULT_STREAK_THRESHOLD,
+        "stale_data_seconds": WATCHDOG_STALE_DATA_SECONDS,
+        "notify_cooldown_minutes": WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
+    }
+
+
+def fetch_watchdog_settings() -> dict:
+    settings = default_watchdog_settings()
+    connection = open_readwrite_connection()
+    try:
+        stored_json = get_dashboard_state_value(connection, "watchdog_settings")
+    finally:
+        connection.close()
+
+    if stored_json:
+        try:
+            stored = json.loads(stored_json)
+            if isinstance(stored, dict):
+                settings.update(stored)
+        except json.JSONDecodeError:
+            pass
+
+    return {"settings": settings}
+
+
+def update_watchdog_settings(payload: dict) -> dict:
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError("settings must be an object")
+
+    normalized = {
+        "fault_streak_threshold": int(settings.get("fault_streak_threshold", WATCHDOG_FAULT_STREAK_THRESHOLD)),
+        "stale_data_seconds": float(settings.get("stale_data_seconds", WATCHDOG_STALE_DATA_SECONDS)),
+        "notify_cooldown_minutes": float(settings.get("notify_cooldown_minutes", WATCHDOG_NOTIFY_COOLDOWN_MINUTES)),
+    }
+
+    if normalized["fault_streak_threshold"] < 1:
+        raise ValueError("fault_streak_threshold must be at least 1")
+    if normalized["stale_data_seconds"] <= 0:
+        raise ValueError("stale_data_seconds must be greater than 0")
+    if normalized["notify_cooldown_minutes"] < 0:
+        raise ValueError("notify_cooldown_minutes must be zero or greater")
+
+    connection = open_readwrite_connection()
+    try:
+        set_dashboard_state_value(connection, "watchdog_settings", json.dumps(normalized))
+        connection.commit()
+    finally:
+        connection.close()
+
+    return {"ok": True, "settings": normalized}
 
 
 def fetch_history(window_name: str) -> dict:
@@ -2883,6 +3035,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(fetch_alert_channel_settings())
             return
 
+        if parsed_path.path == "/api/watchdog-settings":
+            self.send_json_response(fetch_watchdog_settings())
+            return
+
         if parsed_path.path == "/api/dashboard-preferences":
             self.send_json_response(fetch_dashboard_preferences())
             return
@@ -2911,6 +3067,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             if parsed_path.path == "/api/alert-channel-settings":
                 self.send_json_response(update_alert_channel_settings(payload))
+                return
+
+            if parsed_path.path == "/api/watchdog-settings":
+                self.send_json_response(update_watchdog_settings(payload))
                 return
 
             if parsed_path.path == "/api/reset-faults":

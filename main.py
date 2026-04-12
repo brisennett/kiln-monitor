@@ -11,15 +11,13 @@ from config import (
     APP_LOG_PATH,
     DATABASE_PATH,
     ERROR_STREAK_WARNING_THRESHOLD,
+    load_watchdog_settings,
     MAX_SAMPLE_JUMP_C,
     SENSOR_MODEL,
     READ_INTERVAL_SECONDS,
     SPI_CS_PIN,
     STATUS_EVERY_N_SAMPLES,
     THERMOCOUPLE_TYPE,
-    WATCHDOG_FAULT_STREAK_THRESHOLD,
-    WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
-    WATCHDOG_STALE_DATA_SECONDS,
 )
 from notifiers import NotificationError, build_enabled_notifiers, channels_for_rule
 from sensor import SensorReadError, TemperatureSample, build_sensor_reader
@@ -54,7 +52,7 @@ def persist_alerts(storage: SQLiteLogger, alerts, logger) -> None:
             logger.exception("failed to persist alert with level=%s kind=%s", alert.level, alert.kind)
 
 
-def build_watchdog_rule(rule_id: int, name: str) -> AlertRule:
+def build_watchdog_rule(rule_id: int, name: str, cooldown_minutes: float) -> AlertRule:
     return AlertRule(
         id=rule_id,
         name=name,
@@ -63,7 +61,7 @@ def build_watchdog_rule(rule_id: int, name: str) -> AlertRule:
         threshold_f=0.0,
         severity="CRITICAL",
         hysteresis_f=0.0,
-        notify_cooldown_minutes=WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
+        notify_cooldown_minutes=cooldown_minutes,
         color_hex="#ef4444",
         notify_email=True,
         notify_sms=True,
@@ -148,7 +146,7 @@ def deliver_alerts(storage: SQLiteLogger, alerts, updated_rules, logger) -> None
                 logger.warning("alert delivery failed via %s: %s", channel, exc)
 
 
-def deliver_watchdog_alerts(storage: SQLiteLogger, alerts, logger) -> None:
+def deliver_watchdog_alerts(storage: SQLiteLogger, alerts, logger, cooldown_minutes: float) -> None:
     if not alerts:
         return
 
@@ -157,7 +155,7 @@ def deliver_watchdog_alerts(storage: SQLiteLogger, alerts, logger) -> None:
         if alert.rule_id is None or alert.rule_name is None:
             continue
 
-        rule = build_watchdog_rule(alert.rule_id, alert.rule_name)
+        rule = build_watchdog_rule(alert.rule_id, alert.rule_name, cooldown_minutes)
         for notifier in notifiers:
             channel = notifier.channel_name
             if storage.should_rate_limit_alert(
@@ -202,11 +200,11 @@ def deliver_watchdog_alerts(storage: SQLiteLogger, alerts, logger) -> None:
                 logger.warning("watchdog alert delivery failed via %s: %s", channel, exc)
 
 
-def emit_watchdog_alerts(storage: SQLiteLogger, alerts, logger) -> None:
+def emit_watchdog_alerts(storage: SQLiteLogger, alerts, logger, cooldown_minutes: float) -> None:
     if not alerts:
         return
     persist_alerts(storage, alerts, logger)
-    deliver_watchdog_alerts(storage, alerts, logger)
+    deliver_watchdog_alerts(storage, alerts, logger, cooldown_minutes)
     for alert in alerts:
         logger.warning("watchdog %s: %s", alert.kind, alert.detail)
         print(f"{alert.timestamp_utc} | WATCHDOG {alert.level} | {alert.detail}")
@@ -281,6 +279,7 @@ def run() -> int:
     logger = setup_app_logger(APP_LOG_PATH)
     storage = SQLiteLogger(DATABASE_PATH)
     sensor = build_sensor_reader()
+    watchdog_settings = load_watchdog_settings()
 
     should_stop = False
 
@@ -339,7 +338,12 @@ def run() -> int:
                         )
                     )
                     watchdog_stale_active = False
-                emit_watchdog_alerts(storage, watchdog_alerts, logger)
+                emit_watchdog_alerts(
+                    storage,
+                    watchdog_alerts,
+                    logger,
+                    cooldown_minutes=watchdog_settings["notify_cooldown_minutes"],
+                )
                 alert_rules = storage.fetch_alert_rules()
                 alerts, updated_rules = evaluate_alert_rules(sample, alert_rules)
                 persist_alerts(storage, alerts, logger)
@@ -380,7 +384,10 @@ def run() -> int:
                 persist_sample(storage, error_sample, logger)
                 watchdog_alerts = []
 
-                if error_streak >= WATCHDOG_FAULT_STREAK_THRESHOLD and not watchdog_fault_active:
+                if (
+                    error_streak >= watchdog_settings["fault_streak_threshold"]
+                    and not watchdog_fault_active
+                ):
                     watchdog_alerts.append(
                         AlertEvent(
                             timestamp_utc=error_sample.timestamp.isoformat(),
@@ -403,14 +410,22 @@ def run() -> int:
                 else:
                     logger.info("sensor read error: %s", exc)
 
-                emit_watchdog_alerts(storage, watchdog_alerts, logger)
+                emit_watchdog_alerts(
+                    storage,
+                    watchdog_alerts,
+                    logger,
+                    cooldown_minutes=watchdog_settings["notify_cooldown_minutes"],
+                )
                 print(f"{error_sample.timestamp.isoformat()} | ERROR | {exc}")
             except Exception:
                 logger.exception("unexpected runtime failure")
 
             if not loop_completed_with_good_sample:
                 stale_age_seconds = (datetime.now(timezone.utc) - last_good_sample_at).total_seconds()
-                if stale_age_seconds >= WATCHDOG_STALE_DATA_SECONDS and not watchdog_stale_active:
+                if (
+                    stale_age_seconds >= watchdog_settings["stale_data_seconds"]
+                    and not watchdog_stale_active
+                ):
                     watchdog_stale_active = True
                     emit_watchdog_alerts(
                         storage,
@@ -430,6 +445,7 @@ def run() -> int:
                             )
                         ],
                         logger,
+                        cooldown_minutes=watchdog_settings["notify_cooldown_minutes"],
                     )
 
             elapsed = time.monotonic() - loop_started
