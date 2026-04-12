@@ -127,11 +127,13 @@ PAGE_HTML = """<!doctype html>
       flex-direction: column;
       gap: 18px;
       min-width: 0;
+      align-self: start;
     }
     .layout-zone {
       display: grid;
       gap: 12px;
       min-height: 72px;
+      align-content: start;
     }
     .layout-zone.layout-zone-cards {
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -354,6 +356,14 @@ PAGE_HTML = """<!doctype html>
           <label for="panelBgPicker">Panel Background</label>
           <input id="panelBgPicker" class="color-input" type="color" value="#111827" />
         </div>
+        <div class="toolbar-field">
+          <label for="unitSelect">Display Units</label>
+          <select id="unitSelect">
+            <option value="F">Fahrenheit</option>
+            <option value="C">Celsius</option>
+            <option value="BOTH">Both</option>
+          </select>
+        </div>
       </div>
       <div class="toolbar-group">
         <button type="button" id="layoutToggle">Edit Layout</button>
@@ -426,7 +436,7 @@ PAGE_HTML = """<!doctype html>
                 </select>
               </div>
               <div>
-                <label for="ruleThreshold">Threshold F</label>
+                <label for="ruleThreshold" id="ruleThresholdLabel">Threshold F</label>
                 <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
               </div>
               <div>
@@ -438,7 +448,7 @@ PAGE_HTML = """<!doctype html>
                 </select>
               </div>
               <div>
-                <label for="ruleHysteresis">Reset Gap F</label>
+                <label for="ruleHysteresis" id="ruleHysteresisLabel">Reset Gap F</label>
                 <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
               </div>
               <div>
@@ -537,12 +547,16 @@ PAGE_HTML = """<!doctype html>
     const canvas = document.getElementById("tempChart");
     const ctx = canvas.getContext("2d");
     const resolutionSelect = document.getElementById("resolutionSelect");
+    const unitSelect = document.getElementById("unitSelect");
     const layoutToggle = document.getElementById("layoutToggle");
     const accentColorPicker = document.getElementById("accentColorPicker");
     const pageBgPicker = document.getElementById("pageBgPicker");
     const panelBgPicker = document.getElementById("panelBgPicker");
+    const ruleThresholdLabel = document.getElementById("ruleThresholdLabel");
+    const ruleHysteresisLabel = document.getElementById("ruleHysteresisLabel");
     let selectedRange = "24h";
     let selectedResolution = "auto";
+    let selectedUnit = "F";
     let hoverX = null;
     let smoothingEnabled = true;
     let editingRuleId = null;
@@ -550,6 +564,7 @@ PAGE_HTML = """<!doctype html>
     let baseAccentColor = "#38bdf8";
     let layoutEditEnabled = false;
     const HISTORY_BUCKET_PRESETS = {"1h":[2,10,30,60,300],"24h":[60,300,600,900,1800],"7d":[300,600,1800,3600,10800]};
+    let currentRules = [];
     let chartState = {
       points: [],
       plotPoints: [],
@@ -575,6 +590,76 @@ PAGE_HTML = """<!doctype html>
       return ruleType;
     }
 
+    function fToC(tempF) {
+      return (tempF - 32.0) * 5.0 / 9.0;
+    }
+
+    function cToF(tempC) {
+      return (tempC * 9.0 / 5.0) + 32.0;
+    }
+
+    function unitSuffix() {
+      return selectedUnit === "C" ? "C" : "F";
+    }
+
+    function displayTempFromStoredF(tempF) {
+      if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
+        return null;
+      }
+      return selectedUnit === "C" ? fToC(tempF) : tempF;
+    }
+
+    function displayDeltaFromStoredF(tempF) {
+      if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
+        return null;
+      }
+      return selectedUnit === "C" ? (tempF * 5.0 / 9.0) : tempF;
+    }
+
+    function formatPrimaryTemperature(tempF, tempC) {
+      if (tempF === null || tempC === null || tempF === undefined || tempC === undefined) {
+        return "--";
+      }
+      if (selectedUnit === "C") {
+        return `${tempC.toFixed(1)} C`;
+      }
+      if (selectedUnit === "BOTH") {
+        return `${tempF.toFixed(1)} F / ${tempC.toFixed(1)} C`;
+      }
+      return `${tempF.toFixed(1)} F`;
+    }
+
+    function formatRuleTemperatureFromStoredF(tempF) {
+      const converted = displayTempFromStoredF(tempF);
+      return converted === null ? "--" : `${converted.toFixed(1)} ${unitSuffix()}`;
+    }
+
+    function formatRuleDeltaFromStoredF(tempF) {
+      const converted = displayDeltaFromStoredF(tempF);
+      return converted === null ? "--" : `${converted.toFixed(1)} ${unitSuffix()}`;
+    }
+
+    function convertRuleInputToStoredF(value) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+      return selectedUnit === "C" ? cToF(numericValue) : numericValue;
+    }
+
+    function convertStoredFToRuleInput(value) {
+      if (!Number.isFinite(value)) {
+        return value;
+      }
+      return selectedUnit === "C" ? fToC(value) : value;
+    }
+
+    function updateRuleUnitLabels() {
+      const suffix = unitSuffix();
+      ruleThresholdLabel.textContent = `Threshold ${suffix}`;
+      ruleHysteresisLabel.textContent = `Reset Gap ${suffix}`;
+    }
+
     function resetRuleForm() {
       editingRuleId = null;
       ruleForm.reset();
@@ -584,6 +669,7 @@ PAGE_HTML = """<!doctype html>
       document.getElementById("ruleColor").value = "#38bdf8";
       ruleSubmit.textContent = "Add Rule";
       ruleError.textContent = "";
+      updateRuleUnitLabels();
     }
 
     function hexToSoftRgba(hexColor, alpha) {
@@ -632,6 +718,14 @@ PAGE_HTML = """<!doctype html>
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme }),
+      });
+    }
+
+    async function saveDisplayUnit() {
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_unit: selectedUnit }),
       });
     }
 
@@ -797,7 +891,12 @@ PAGE_HTML = """<!doctype html>
       } else {
         applyTheme(null);
       }
-      if (Array.isArray(payload.card_order)) {
+      if (payload.display_unit && ["F", "C", "BOTH"].includes(payload.display_unit)) {
+        selectedUnit = payload.display_unit;
+      }
+      unitSelect.value = selectedUnit;
+      updateRuleUnitLabels();
+      if (payload.card_order && typeof payload.card_order === "object" && !Array.isArray(payload.card_order)) {
         applyCardLayout(payload.card_order);
       } else {
         applyCardLayout(defaultCardLayout());
@@ -899,7 +998,7 @@ PAGE_HTML = """<!doctype html>
       ctx.fillStyle = "#f8fafc";
       ctx.font = "700 14px system-ui, sans-serif";
       const valueText = nearest.status === "OK"
-        ? `${nearest.temp_f.toFixed(1)} F / ${nearest.temp_c.toFixed(1)} C`
+        ? formatPrimaryTemperature(nearest.temp_f, nearest.temp_c)
         : `ERROR: ${nearest.detail || "fault"}`;
       ctx.fillText(valueText, boxX + 12, boxY + 23);
 
@@ -948,7 +1047,7 @@ PAGE_HTML = """<!doctype html>
 
       const times = displayPoints.map((point) => new Date(point.timestamp_utc).getTime());
       const validTemps = displayPoints
-        .map((point) => point.temp_f)
+        .map((point) => displayTempFromStoredF(point.temp_f))
         .filter((temp) => temp !== null && Number.isFinite(temp));
       const minTime = Math.min(...times);
       const maxTime = Math.max(...times);
@@ -968,8 +1067,8 @@ PAGE_HTML = """<!doctype html>
         return left + ((pointTime - minTime) / timeSpan) * plotWidth;
       }
 
-      function yFor(tempF) {
-        return top + plotHeight - ((tempF - paddedMinTemp) / tempSpan) * plotHeight;
+      function yFor(displayTemp) {
+        return top + plotHeight - ((displayTemp - paddedMinTemp) / tempSpan) * plotHeight;
       }
 
       ctx.strokeStyle = "#1f2937";
@@ -982,7 +1081,7 @@ PAGE_HTML = """<!doctype html>
         ctx.moveTo(left, y);
         ctx.lineTo(left + plotWidth, y);
         ctx.stroke();
-        ctx.fillText(`${tempLabel.toFixed(0)} F`, 8, y + 4);
+        ctx.fillText(`${tempLabel.toFixed(0)} ${unitSuffix()}`, 8, y + 4);
       }
 
       let segmentOpen = false;
@@ -992,7 +1091,8 @@ PAGE_HTML = """<!doctype html>
 
       displayPoints.forEach((point) => {
         const pointTime = new Date(point.timestamp_utc).getTime();
-        if (point.temp_f === null || !Number.isFinite(point.temp_f) || point.status !== "OK") {
+        const displayTemp = displayTempFromStoredF(point.temp_f);
+        if (displayTemp === null || !Number.isFinite(displayTemp) || point.status !== "OK") {
           segmentOpen = false;
           if (point.status === "ERROR") {
             chartState.plotPoints.push({
@@ -1004,7 +1104,7 @@ PAGE_HTML = """<!doctype html>
           return;
         }
         const x = xFor(pointTime);
-        const y = yFor(point.temp_f);
+        const y = yFor(displayTemp);
         chartState.plotPoints.push({
           ...point,
           x,
@@ -1038,7 +1138,7 @@ PAGE_HTML = """<!doctype html>
 
       if (validTemps.length) {
         const modeLabel = smoothingEnabled ? "smoothed" : "raw";
-        chartMeta.textContent = `${displayPoints.length} samples, ${minTemp.toFixed(1)} F to ${maxTemp.toFixed(1)} F, ${modeLabel}`;
+        chartMeta.textContent = `${displayPoints.length} samples, ${minTemp.toFixed(1)} ${unitSuffix()} to ${maxTemp.toFixed(1)} ${unitSuffix()}, ${modeLabel}`;
       } else {
         chartMeta.textContent = `${displayPoints.length} samples, no valid temperatures in range`;
       }
@@ -1069,7 +1169,7 @@ PAGE_HTML = """<!doctype html>
       applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : baseAccentColor);
       banner.textContent = isOk ? "Sensor OK" : `Sensor ERROR: ${latest.detail || "fault sample logged"}`;
       banner.className = `status-banner ${isOk ? "status-ok" : "status-error"}`;
-      latestTemp.textContent = latest.temp_f === null ? "--" : `${latest.temp_f.toFixed(1)} F / ${latest.temp_c.toFixed(1)} C`;
+      latestTemp.textContent = latest.temp_f === null ? "--" : formatPrimaryTemperature(latest.temp_f, latest.temp_c);
       lastUpdate.textContent = formatTimestamp(latest.timestamp_utc);
       sampleAge.textContent = latest.sample_age;
       lastFault.textContent = payload.latest_fault
@@ -1084,6 +1184,7 @@ PAGE_HTML = """<!doctype html>
       const response = await fetch("/api/alert-rules");
       const payload = await response.json();
       const rules = payload.rules || [];
+      currentRules = rules;
 
       if (!rules.length) {
         rulesTableBody.innerHTML = '<tr><td colspan="7" class="subtle">No alert rules configured yet.</td></tr>';
@@ -1094,9 +1195,9 @@ PAGE_HTML = """<!doctype html>
       rules.forEach((rule) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${rule.hysteresis_f.toFixed(1)} F</div></td>
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
-          <td>${rule.threshold_f.toFixed(1)} F</td>
+          <td>${formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
           <td>${rule.severity}</td>
           <td>
             <span class="pill ${rule.enabled ? "pill-on" : "pill-off"}">${rule.enabled ? "Enabled" : "Disabled"}</span>
@@ -1120,9 +1221,9 @@ PAGE_HTML = """<!doctype html>
           editingRuleId = rule.id;
           document.getElementById("ruleName").value = rule.name;
           document.getElementById("ruleType").value = rule.rule_type;
-          document.getElementById("ruleThreshold").value = rule.threshold_f;
+          document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
           document.getElementById("ruleSeverity").value = rule.severity;
-          document.getElementById("ruleHysteresis").value = rule.hysteresis_f;
+          document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
           document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
           document.getElementById("ruleColor").value = rule.color_hex;
           ruleSubmit.textContent = "Save Rule";
@@ -1188,6 +1289,20 @@ PAGE_HTML = """<!doctype html>
       await refreshHistory();
     });
 
+    unitSelect.addEventListener("change", async () => {
+      selectedUnit = unitSelect.value;
+      updateRuleUnitLabels();
+      if (editingRuleId !== null) {
+        const rule = currentRules.find((item) => item.id === editingRuleId);
+        if (rule) {
+          document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
+          document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+        }
+      }
+      await saveDisplayUnit();
+      await refreshAll();
+    });
+
     layoutToggle.addEventListener("click", () => {
       setLayoutEditEnabled(!layoutEditEnabled);
     });
@@ -1222,9 +1337,9 @@ PAGE_HTML = """<!doctype html>
       const payload = {
         name: document.getElementById("ruleName").value.trim(),
         rule_type: document.getElementById("ruleType").value,
-        threshold_f: Number(document.getElementById("ruleThreshold").value),
+        threshold_f: convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
         severity: document.getElementById("ruleSeverity").value,
-        hysteresis_f: Number(document.getElementById("ruleHysteresis").value),
+        hysteresis_f: convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
         enabled: document.getElementById("ruleEnabled").value === "true",
         color_hex: document.getElementById("ruleColor").value,
       };
@@ -1460,18 +1575,22 @@ def fetch_dashboard_preferences() -> dict:
     try:
         theme_json = get_dashboard_state_value(connection, "theme")
         card_order_json = get_dashboard_state_value(connection, "card_order")
+        display_unit = get_dashboard_state_value(connection, "display_unit")
     finally:
         connection.close()
 
     payload: dict = {
         "theme": None,
         "card_order": None,
+        "display_unit": "F",
     }
 
     if theme_json:
         payload["theme"] = json.loads(theme_json)
     if card_order_json:
         payload["card_order"] = json.loads(card_order_json)
+    if display_unit in {"F", "C", "BOTH"}:
+        payload["display_unit"] = display_unit
     return payload
 
 
@@ -1500,9 +1619,23 @@ def update_dashboard_preferences(payload: dict) -> dict:
 
         if "card_order" in payload:
             card_order = payload["card_order"]
-            if not isinstance(card_order, list) or not all(isinstance(item, str) for item in card_order):
-                raise ValueError("card_order must be a list of strings")
+            valid_zone_ids = {"top-summary", "below-chart", "sidebar"}
+            if not isinstance(card_order, dict):
+                raise ValueError("card_order must be a zone mapping")
+            if any(zone_id not in valid_zone_ids for zone_id in card_order.keys()):
+                raise ValueError("card_order contains an unknown zone")
+            if not all(
+                isinstance(card_ids, list) and all(isinstance(item, str) for item in card_ids)
+                for card_ids in card_order.values()
+            ):
+                raise ValueError("card_order zone values must be lists of strings")
             set_dashboard_state_value(connection, "card_order", json.dumps(card_order))
+
+        if "display_unit" in payload:
+            display_unit = str(payload["display_unit"]).upper()
+            if display_unit not in {"F", "C", "BOTH"}:
+                raise ValueError("display_unit must be F, C, or BOTH")
+            set_dashboard_state_value(connection, "display_unit", display_unit)
 
         connection.commit()
     finally:
