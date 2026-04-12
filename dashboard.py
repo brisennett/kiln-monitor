@@ -18,7 +18,20 @@ HISTORY_WINDOWS = {
     "24h": timedelta(hours=24),
     "7d": timedelta(days=7),
 }
-MAX_HISTORY_ROWS = 5000
+HISTORY_BUCKET_PRESETS = {
+    "1h": {
+        "auto_bucket_seconds": 2,
+        "resolution_options": [2, 10, 30, 60, 300],
+    },
+    "24h": {
+        "auto_bucket_seconds": 600,
+        "resolution_options": [60, 300, 600, 900, 1800],
+    },
+    "7d": {
+        "auto_bucket_seconds": 1800,
+        "resolution_options": [300, 600, 1800, 3600, 10800],
+    },
+}
 
 PAGE_HTML = """<!doctype html>
 <html lang="en">
@@ -29,15 +42,23 @@ PAGE_HTML = """<!doctype html>
   <style>
     :root {
       color-scheme: dark;
-      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-      background: #0f172a;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: var(--page-bg);
       color: #e5e7eb;
       --accent-color: #38bdf8;
       --accent-soft: rgba(56, 189, 248, 0.18);
+      --page-bg: #0b1220;
+      --page-bg-secondary: #131d31;
+      --panel-bg: #111827;
+      --panel-border: rgba(56, 189, 248, 0.18);
     }
     body {
       margin: 0;
       padding: 24px;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
+        linear-gradient(180deg, var(--page-bg-secondary), var(--page-bg));
+      min-height: 100vh;
     }
     main {
       max-width: 1100px;
@@ -62,6 +83,27 @@ PAGE_HTML = """<!doctype html>
     .status-error {
       background: #991b1b;
     }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+    }
+    .toolbar-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+    }
+    .toolbar-field {
+      min-width: 150px;
+    }
     .cards {
       display: grid;
       gap: 12px;
@@ -69,11 +111,23 @@ PAGE_HTML = """<!doctype html>
       margin-bottom: 20px;
     }
     .card {
-      background: #111827;
-      border: 1px solid var(--accent-soft);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
       border-radius: 16px;
       padding: 16px;
       box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .card.layout-edit {
+      cursor: grab;
+    }
+    .card.dragging {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+    .card.drag-target {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px var(--accent-soft);
     }
     .label {
       color: #9ca3af;
@@ -88,8 +142,8 @@ PAGE_HTML = """<!doctype html>
       word-break: break-word;
     }
     .chart-panel {
-      background: #111827;
-      border: 1px solid var(--accent-soft);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
       border-radius: 16px;
       padding: 16px;
     }
@@ -129,8 +183,8 @@ PAGE_HTML = """<!doctype html>
       margin-top: 10px;
     }
     .rules-panel {
-      background: #111827;
-      border: 1px solid var(--accent-soft);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
       border-radius: 16px;
       padding: 16px;
       margin-top: 20px;
@@ -209,37 +263,90 @@ PAGE_HTML = """<!doctype html>
       border: 1px solid rgba(255, 255, 255, 0.25);
       vertical-align: middle;
     }
+    .card-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .mini-button {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .toolbar {
+        padding: 14px;
+      }
+      .chart-top {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      canvas {
+        height: 320px;
+      }
+    }
   </style>
 </head>
 <body>
   <main>
     <h1>Kiln Monitor</h1>
+    <section class="toolbar">
+      <div class="toolbar-group">
+        <div class="toolbar-field">
+          <label for="accentColorPicker">Accent Color</label>
+          <input id="accentColorPicker" class="color-input" type="color" value="#38bdf8" />
+        </div>
+        <div class="toolbar-field">
+          <label for="pageBgPicker">Page Background</label>
+          <input id="pageBgPicker" class="color-input" type="color" value="#0b1220" />
+        </div>
+        <div class="toolbar-field">
+          <label for="panelBgPicker">Panel Background</label>
+          <input id="panelBgPicker" class="color-input" type="color" value="#111827" />
+        </div>
+      </div>
+      <div class="toolbar-group">
+        <button type="button" id="layoutToggle">Edit Layout</button>
+        <button type="button" id="resetColorsButton">Reset Colors</button>
+        <button type="button" id="resetFaultsButton">Reset Faults</button>
+        <button type="button" id="resetAlertsButton">Reset Alerts</button>
+      </div>
+    </section>
     <div id="statusBanner" class="status-banner">Loading...</div>
 
-    <section class="cards">
-      <div class="card">
+    <section class="cards" id="cardsGrid">
+      <div class="card" data-card-id="latest-temp">
         <div class="label">Latest Temperature</div>
         <div class="value" id="latestTemp">--</div>
       </div>
-      <div class="card">
+      <div class="card" data-card-id="last-update">
         <div class="label">Last Update</div>
         <div class="value" id="lastUpdate">--</div>
       </div>
-      <div class="card">
+      <div class="card" data-card-id="sample-age">
         <div class="label">Sample Age</div>
         <div class="value" id="sampleAge">--</div>
       </div>
-      <div class="card">
+      <div class="card" data-card-id="last-fault">
         <div class="label">Last Fault</div>
         <div class="value" id="lastFault">--</div>
+        <div class="card-actions">
+          <button type="button" class="mini-button" id="inlineResetFaultsButton">Reset Faults</button>
+        </div>
       </div>
-      <div class="card">
+      <div class="card" data-card-id="total-rows">
         <div class="label">Total Rows</div>
         <div class="value" id="totalRows">--</div>
       </div>
-      <div class="card">
+      <div class="card" data-card-id="last-alert">
         <div class="label">Last Alert</div>
         <div class="value" id="lastAlert">--</div>
+        <div class="card-actions">
+          <button type="button" class="mini-button" id="inlineResetAlertsButton">Reset Alerts</button>
+        </div>
       </div>
     </section>
 
@@ -250,6 +357,9 @@ PAGE_HTML = """<!doctype html>
           <div class="subtle" id="chartMeta">--</div>
         </div>
         <div class="range-buttons">
+          <select id="resolutionSelect" aria-label="Chart resolution">
+            <option value="auto">Auto</option>
+          </select>
           <button type="button" id="smoothToggle" class="active">Smooth</button>
           <button type="button" data-range="1h">1h</button>
           <button type="button" data-range="24h" class="active">24h</button>
@@ -350,13 +460,23 @@ PAGE_HTML = """<!doctype html>
     const ruleCancel = document.getElementById("ruleCancel");
     const ruleError = document.getElementById("ruleError");
     const rulesTableBody = document.getElementById("rulesTableBody");
+    const cardsGrid = document.getElementById("cardsGrid");
     const canvas = document.getElementById("tempChart");
     const ctx = canvas.getContext("2d");
+    const resolutionSelect = document.getElementById("resolutionSelect");
+    const layoutToggle = document.getElementById("layoutToggle");
+    const accentColorPicker = document.getElementById("accentColorPicker");
+    const pageBgPicker = document.getElementById("pageBgPicker");
+    const panelBgPicker = document.getElementById("panelBgPicker");
     let selectedRange = "24h";
+    let selectedResolution = "auto";
     let hoverX = null;
     let smoothingEnabled = true;
     let editingRuleId = null;
     let currentAccentColor = "#38bdf8";
+    let baseAccentColor = "#38bdf8";
+    let layoutEditEnabled = false;
+    const HISTORY_BUCKET_PRESETS = {"1h":[2,10,30,60,300],"24h":[60,300,600,900,1800],"7d":[300,600,1800,3600,10800]};
     let chartState = {
       points: [],
       plotPoints: [],
@@ -405,6 +525,156 @@ PAGE_HTML = """<!doctype html>
       currentAccentColor = hexColor || "#38bdf8";
       document.documentElement.style.setProperty("--accent-color", currentAccentColor);
       document.documentElement.style.setProperty("--accent-soft", hexToSoftRgba(currentAccentColor, 0.22));
+    }
+
+    function applyTheme(theme) {
+      const resolvedTheme = {
+        accent: theme?.accent || "#38bdf8",
+        pageBg: theme?.pageBg || "#0b1220",
+        panelBg: theme?.panelBg || "#111827",
+      };
+      baseAccentColor = resolvedTheme.accent;
+      document.documentElement.style.setProperty("--page-bg", resolvedTheme.pageBg);
+      document.documentElement.style.setProperty("--page-bg-secondary", resolvedTheme.pageBg);
+      document.documentElement.style.setProperty("--panel-bg", resolvedTheme.panelBg);
+      document.documentElement.style.setProperty("--panel-border", hexToSoftRgba(resolvedTheme.accent, 0.22));
+      applyAccentColor(resolvedTheme.accent);
+      accentColorPicker.value = resolvedTheme.accent;
+      pageBgPicker.value = resolvedTheme.pageBg;
+      panelBgPicker.value = resolvedTheme.panelBg;
+    }
+
+    function loadTheme() {
+      applyTheme(null);
+    }
+
+    async function saveTheme() {
+      const theme = {
+        accent: accentColorPicker.value,
+        pageBg: pageBgPicker.value,
+        panelBg: panelBgPicker.value,
+      };
+      applyTheme(theme);
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme }),
+      });
+    }
+
+    function populateResolutionOptions() {
+      const options = HISTORY_BUCKET_PRESETS[selectedRange] || HISTORY_BUCKET_PRESETS["24h"];
+      const currentValue = selectedResolution;
+      resolutionSelect.innerHTML = '<option value="auto">Auto</option>';
+      options.forEach((seconds) => {
+        const option = document.createElement("option");
+        option.value = String(seconds);
+        option.textContent = seconds < 60
+          ? `${seconds}s`
+          : seconds < 3600
+            ? `${Math.round(seconds / 60)}m`
+            : `${Math.round(seconds / 3600)}h`;
+        resolutionSelect.appendChild(option);
+      });
+      if (currentValue === "auto" || options.includes(Number(currentValue))) {
+        resolutionSelect.value = currentValue;
+      } else {
+        selectedResolution = "auto";
+        resolutionSelect.value = "auto";
+      }
+    }
+
+    function applyCardOrder(order) {
+      const cards = Array.from(cardsGrid.querySelectorAll(".card"));
+      const cardById = new Map(cards.map((card) => [card.dataset.cardId, card]));
+      order.forEach((cardId) => {
+        const card = cardById.get(cardId);
+        if (card) {
+          cardsGrid.appendChild(card);
+          cardById.delete(cardId);
+        }
+      });
+      cardById.forEach((card) => cardsGrid.appendChild(card));
+    }
+
+    async function saveCardOrder() {
+      const order = Array.from(cardsGrid.querySelectorAll(".card")).map((card) => card.dataset.cardId);
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card_order: order }),
+      });
+    }
+
+    function setLayoutEditEnabled(enabled) {
+      layoutEditEnabled = enabled;
+      layoutToggle.classList.toggle("active", enabled);
+      layoutToggle.textContent = enabled ? "Done Editing" : "Edit Layout";
+      cardsGrid.querySelectorAll(".card").forEach((card) => {
+        card.draggable = enabled;
+        card.classList.toggle("layout-edit", enabled);
+      });
+    }
+
+    function setupCardDragAndDrop() {
+      let draggedCard = null;
+      cardsGrid.querySelectorAll(".card").forEach((card) => {
+        card.addEventListener("dragstart", () => {
+          if (!layoutEditEnabled) {
+            return;
+          }
+          draggedCard = card;
+          card.classList.add("dragging");
+        });
+        card.addEventListener("dragend", () => {
+          card.classList.remove("dragging");
+          cardsGrid.querySelectorAll(".card").forEach((item) => item.classList.remove("drag-target"));
+          if (draggedCard) {
+            void saveCardOrder();
+          }
+          draggedCard = null;
+        });
+        card.addEventListener("dragover", (event) => {
+          if (!layoutEditEnabled || !draggedCard || draggedCard === card) {
+            return;
+          }
+          event.preventDefault();
+          cardsGrid.querySelectorAll(".card").forEach((item) => item.classList.remove("drag-target"));
+          card.classList.add("drag-target");
+          const rect = card.getBoundingClientRect();
+          const before = event.clientY < rect.top + rect.height / 2;
+          if (before) {
+            cardsGrid.insertBefore(draggedCard, card);
+          } else {
+            cardsGrid.insertBefore(draggedCard, card.nextSibling);
+          }
+        });
+        card.addEventListener("dragleave", () => {
+          card.classList.remove("drag-target");
+        });
+      });
+    }
+
+    async function postReset(path) {
+      const response = await fetch(path, { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.error || "Reset failed");
+      }
+      await refreshAll();
+    }
+
+    async function loadDashboardPreferences() {
+      const response = await fetch("/api/dashboard-preferences");
+      const payload = await response.json();
+      if (payload.theme) {
+        applyTheme(payload.theme);
+      } else {
+        applyTheme(null);
+      }
+      if (Array.isArray(payload.card_order)) {
+        applyCardOrder(payload.card_order);
+      }
     }
 
     function resizeCanvas() {
@@ -658,7 +928,7 @@ PAGE_HTML = """<!doctype html>
       if (!payload.latest_sample) {
         banner.textContent = "No samples logged yet";
         banner.className = "status-banner";
-        applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : "#38bdf8");
+        applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : baseAccentColor);
         latestTemp.textContent = "--";
         lastUpdate.textContent = "--";
         sampleAge.textContent = "--";
@@ -669,7 +939,7 @@ PAGE_HTML = """<!doctype html>
 
       const latest = payload.latest_sample;
       const isOk = latest.status === "OK";
-      applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : "#38bdf8");
+      applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : baseAccentColor);
       banner.textContent = isOk ? "Sensor OK" : `Sensor ERROR: ${latest.detail || "fault sample logged"}`;
       banner.className = `status-banner ${isOk ? "status-ok" : "status-error"}`;
       latestTemp.textContent = latest.temp_f === null ? "--" : `${latest.temp_f.toFixed(1)} F / ${latest.temp_c.toFixed(1)} C`;
@@ -745,9 +1015,18 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function refreshHistory() {
-      const response = await fetch(`/api/history?range=${encodeURIComponent(selectedRange)}`);
+      const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
+      const response = await fetch(`/api/history?${params.toString()}`);
       const payload = await response.json();
       drawChart(payload.samples);
+      if (payload.meta) {
+        const resolutionLabel = payload.meta.bucket_seconds >= 3600
+          ? `${Math.round(payload.meta.bucket_seconds / 3600)}h`
+          : payload.meta.bucket_seconds >= 60
+            ? `${Math.round(payload.meta.bucket_seconds / 60)}m`
+            : `${payload.meta.bucket_seconds}s`;
+        chartMeta.textContent = `${payload.meta.returned_samples} plotted from ${payload.meta.raw_rows} raw rows at ${resolutionLabel} buckets`;
+      }
     }
 
     async function refreshAll() {
@@ -762,6 +1041,7 @@ PAGE_HTML = """<!doctype html>
     document.querySelectorAll("button[data-range]").forEach((button) => {
       button.addEventListener("click", async () => {
         selectedRange = button.dataset.range;
+        populateResolutionOptions();
         document.querySelectorAll("button[data-range]").forEach((item) => {
           item.classList.toggle("active", item === button);
         });
@@ -775,6 +1055,39 @@ PAGE_HTML = """<!doctype html>
       event.target.textContent = smoothingEnabled ? "Smooth" : "Raw";
       drawChart(chartState.points);
     });
+
+    resolutionSelect.addEventListener("change", async () => {
+      selectedResolution = resolutionSelect.value;
+      await refreshHistory();
+    });
+
+    layoutToggle.addEventListener("click", () => {
+      setLayoutEditEnabled(!layoutEditEnabled);
+    });
+
+    accentColorPicker.addEventListener("input", () => { void saveTheme(); });
+    pageBgPicker.addEventListener("input", () => { void saveTheme(); });
+    panelBgPicker.addEventListener("input", () => { void saveTheme(); });
+
+    document.getElementById("resetColorsButton").addEventListener("click", async () => {
+      applyTheme(null);
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme: {
+            accent: "#38bdf8",
+            pageBg: "#0b1220",
+            panelBg: "#111827",
+          },
+        }),
+      });
+    });
+
+    document.getElementById("resetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
+    document.getElementById("resetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
+    document.getElementById("inlineResetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
+    document.getElementById("inlineResetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
 
     ruleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -822,10 +1135,12 @@ PAGE_HTML = """<!doctype html>
       drawChart(chartState.points);
     });
 
+    setupCardDragAndDrop();
+    populateResolutionOptions();
     window.addEventListener("resize", refreshHistory);
     resetRuleForm();
-    applyAccentColor("#38bdf8");
-    refreshAll();
+    setLayoutEditEnabled(false);
+    loadDashboardPreferences().then(refreshAll);
     setInterval(refreshAll, 5000);
   </script>
 </body>
@@ -897,8 +1212,35 @@ def open_readwrite_connection() -> sqlite3.Connection:
         connection.execute(
             "ALTER TABLE alert_rules ADD COLUMN color_hex TEXT NOT NULL DEFAULT '#38bdf8'"
         )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dashboard_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+        """
+    )
     connection.commit()
     return connection
+
+
+def get_dashboard_state_value(connection: sqlite3.Connection, key: str) -> str | None:
+    row = connection.execute(
+        "SELECT value FROM dashboard_state WHERE key = ?",
+        (key,),
+    ).fetchone()
+    return None if row is None else row["value"]
+
+
+def set_dashboard_state_value(connection: sqlite3.Connection, key: str, value: str) -> None:
+    connection.execute(
+        """
+        INSERT INTO dashboard_state (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key, value),
+    )
 
 
 def fetch_dashboard_status() -> dict:
@@ -914,6 +1256,8 @@ def fetch_dashboard_status() -> dict:
         }
 
     try:
+        fault_acknowledged_at = get_dashboard_state_value(connection, "fault_acknowledged_at")
+        alert_acknowledged_at = get_dashboard_state_value(connection, "alert_acknowledged_at")
         latest_sample = connection.execute(
             """
             SELECT id, timestamp_utc, temp_c, temp_f, status, detail
@@ -927,10 +1271,11 @@ def fetch_dashboard_status() -> dict:
             SELECT id, timestamp_utc, detail
             FROM temperature_log
             WHERE status = 'ERROR'
+              AND (? IS NULL OR timestamp_utc > ?)
             ORDER BY id DESC
             LIMIT 1
             """
-        ).fetchone()
+        , (fault_acknowledged_at, fault_acknowledged_at)).fetchone()
         latest_alert = None
         if table_exists(connection, "alert_log"):
             latest_alert_select = "id, timestamp_utc, level, kind, detail, temp_c, temp_f"
@@ -940,10 +1285,11 @@ def fetch_dashboard_status() -> dict:
                 f"""
                 SELECT {latest_alert_select}
                 FROM alert_log
+                WHERE (? IS NULL OR timestamp_utc > ?)
                 ORDER BY id DESC
                 LIMIT 1
                 """
-            ).fetchone()
+            , (alert_acknowledged_at, alert_acknowledged_at)).fetchone()
         active_alert_rule = None
         if table_exists(connection, "alert_rules"):
             select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at"
@@ -982,29 +1328,108 @@ def fetch_dashboard_status() -> dict:
     }
 
 
+def fetch_dashboard_preferences() -> dict:
+    connection = open_readwrite_connection()
+    try:
+        theme_json = get_dashboard_state_value(connection, "theme")
+        card_order_json = get_dashboard_state_value(connection, "card_order")
+    finally:
+        connection.close()
+
+    payload: dict = {
+        "theme": None,
+        "card_order": None,
+    }
+
+    if theme_json:
+        payload["theme"] = json.loads(theme_json)
+    if card_order_json:
+        payload["card_order"] = json.loads(card_order_json)
+    return payload
+
+
+def update_dashboard_preferences(payload: dict) -> dict:
+    connection = open_readwrite_connection()
+    try:
+        if "theme" in payload:
+            theme = payload["theme"]
+            if not isinstance(theme, dict):
+                raise ValueError("theme must be an object")
+            accent = str(theme.get("accent", "#38bdf8")).strip()
+            page_bg = str(theme.get("pageBg", "#0b1220")).strip()
+            panel_bg = str(theme.get("panelBg", "#111827")).strip()
+            for color_value in (accent, page_bg, panel_bg):
+                if not color_value.startswith("#") or len(color_value) != 7:
+                    raise ValueError("theme colors must be hex values like #112233")
+            set_dashboard_state_value(
+                connection,
+                "theme",
+                json.dumps({
+                    "accent": accent,
+                    "pageBg": page_bg,
+                    "panelBg": panel_bg,
+                }),
+            )
+
+        if "card_order" in payload:
+            card_order = payload["card_order"]
+            if not isinstance(card_order, list) or not all(isinstance(item, str) for item in card_order):
+                raise ValueError("card_order must be a list of strings")
+            set_dashboard_state_value(connection, "card_order", json.dumps(card_order))
+
+        connection.commit()
+    finally:
+        connection.close()
+
+    return {"ok": True}
+
+
 def fetch_history(window_name: str) -> dict:
     if window_name not in HISTORY_WINDOWS:
         window_name = "24h"
 
     connection = open_readonly_connection()
     if connection is None:
-        return {"range": window_name, "samples": []}
+        return {"range": window_name, "samples": [], "meta": None}
 
     cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
+    bucket_seconds = HISTORY_BUCKET_PRESETS[window_name]["auto_bucket_seconds"]
+    raw_rows = 0
     try:
+        raw_rows = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM temperature_log
+            WHERE timestamp_utc >= ?
+            """,
+            (cutoff,),
+        ).fetchone()[0]
         rows = connection.execute(
             """
-            SELECT id, timestamp_utc, temp_c, temp_f, status, detail
-            FROM (
-                SELECT id, timestamp_utc, temp_c, temp_f, status, detail
-                FROM temperature_log
-                WHERE timestamp_utc >= ?
-                ORDER BY id DESC
-                LIMIT ?
-            )
-            ORDER BY id ASC
+            SELECT
+                MIN(id) AS id,
+                MIN(timestamp_utc) AS timestamp_utc,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0
+                    THEN AVG(CASE WHEN status = 'OK' THEN temp_c END)
+                    ELSE NULL
+                END AS temp_c,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0
+                    THEN AVG(CASE WHEN status = 'OK' THEN temp_f END)
+                    ELSE NULL
+                END AS temp_f,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0 THEN 'OK'
+                    ELSE 'ERROR'
+                END AS status,
+                GROUP_CONCAT(DISTINCT CASE WHEN status = 'ERROR' THEN detail END) AS detail
+            FROM temperature_log
+            WHERE timestamp_utc >= ?
+            GROUP BY CAST(strftime('%s', timestamp_utc) AS INTEGER) / ?
+            ORDER BY MIN(id) ASC
             """,
-            (cutoff, MAX_HISTORY_ROWS),
+            (cutoff, bucket_seconds),
         ).fetchall()
     finally:
         connection.close()
@@ -1012,6 +1437,81 @@ def fetch_history(window_name: str) -> dict:
     return {
         "range": window_name,
         "samples": [row_to_payload(row) for row in rows],
+        "meta": {
+            "bucket_seconds": bucket_seconds,
+            "returned_samples": len(rows),
+            "raw_rows": raw_rows,
+        },
+    }
+
+
+def fetch_history_with_resolution(window_name: str, resolution_name: str) -> dict:
+    if window_name not in HISTORY_WINDOWS:
+        window_name = "24h"
+
+    if resolution_name == "auto":
+        return fetch_history(window_name)
+
+    try:
+        bucket_seconds = int(resolution_name)
+    except ValueError:
+        return fetch_history(window_name)
+
+    if bucket_seconds <= 0:
+        return fetch_history(window_name)
+
+    connection = open_readonly_connection()
+    if connection is None:
+        return {"range": window_name, "samples": [], "meta": None}
+
+    cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
+    try:
+        raw_rows = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM temperature_log
+            WHERE timestamp_utc >= ?
+            """,
+            (cutoff,),
+        ).fetchone()[0]
+        rows = connection.execute(
+            """
+            SELECT
+                MIN(id) AS id,
+                MIN(timestamp_utc) AS timestamp_utc,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0
+                    THEN AVG(CASE WHEN status = 'OK' THEN temp_c END)
+                    ELSE NULL
+                END AS temp_c,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0
+                    THEN AVG(CASE WHEN status = 'OK' THEN temp_f END)
+                    ELSE NULL
+                END AS temp_f,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0 THEN 'OK'
+                    ELSE 'ERROR'
+                END AS status,
+                GROUP_CONCAT(DISTINCT CASE WHEN status = 'ERROR' THEN detail END) AS detail
+            FROM temperature_log
+            WHERE timestamp_utc >= ?
+            GROUP BY CAST(strftime('%s', timestamp_utc) AS INTEGER) / ?
+            ORDER BY MIN(id) ASC
+            """,
+            (cutoff, bucket_seconds),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return {
+        "range": window_name,
+        "samples": [row_to_payload(row) for row in rows],
+        "meta": {
+            "bucket_seconds": bucket_seconds,
+            "returned_samples": len(rows),
+            "raw_rows": raw_rows,
+        },
     }
 
 
@@ -1162,6 +1662,27 @@ def delete_alert_rule(rule_id: int) -> dict:
     return {"ok": True}
 
 
+def reset_faults() -> dict:
+    connection = open_readwrite_connection()
+    try:
+        set_dashboard_state_value(connection, "fault_acknowledged_at", datetime.now(timezone.utc).isoformat())
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
+def reset_alerts() -> dict:
+    connection = open_readwrite_connection()
+    try:
+        connection.execute("UPDATE alert_rules SET active = 0")
+        set_dashboard_state_value(connection, "alert_acknowledged_at", datetime.now(timezone.utc).isoformat())
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
 def row_to_payload(row: sqlite3.Row | None) -> dict | None:
     if row is None:
         return None
@@ -1218,11 +1739,16 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/api/history":
             query = parse_qs(parsed_path.query)
             range_name = query.get("range", ["24h"])[0]
-            self.send_json_response(fetch_history(range_name))
+            resolution_name = query.get("resolution", ["auto"])[0]
+            self.send_json_response(fetch_history_with_resolution(range_name, resolution_name))
             return
 
         if parsed_path.path == "/api/alert-rules":
             self.send_json_response(fetch_alert_rules())
+            return
+
+        if parsed_path.path == "/api/dashboard-preferences":
+            self.send_json_response(fetch_dashboard_preferences())
             return
 
         self.send_error(404, "Not Found")
@@ -1241,6 +1767,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         try:
             if parsed_path.path == "/api/alert-rules":
                 self.send_json_response(create_alert_rule(payload))
+                return
+
+            if parsed_path.path == "/api/dashboard-preferences":
+                self.send_json_response(update_dashboard_preferences(payload))
+                return
+
+            if parsed_path.path == "/api/reset-faults":
+                self.send_json_response(reset_faults())
+                return
+
+            if parsed_path.path == "/api/reset-alerts":
+                self.send_json_response(reset_alerts())
                 return
 
             if parsed_path.path.startswith("/api/alert-rules/") and parsed_path.path.endswith("/delete"):

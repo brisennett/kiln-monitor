@@ -179,6 +179,22 @@ Then open `http://<pi-hostname-or-ip>:8080/` from another device on the same net
 
 The page auto-refreshes every 5 seconds and includes `1h`, `24h`, and `7d` trend views.
 
+Dashboard features:
+
+- Drag-and-drop card layout with an `Edit Layout` mode
+- Custom accent, page, and panel colors
+- Shared dashboard preferences stored in SQLite so layout and theme follow across devices
+- Reset buttons to acknowledge current faults and clear active alerts back to normal
+- Range-aware chart downsampling with configurable resolution choices in the UI
+
+Default chart sampling behavior:
+
+- `1h` uses raw-like `2s` buckets by default
+- `24h` uses `10m` buckets by default
+- `7d` uses `30m` buckets by default
+
+The dashboard does not delete source rows from SQLite when downsampling. It only changes how many points are plotted for readability.
+
 ## Alerts
 
 Alert rules are configured in the dashboard UI and stored in SQLite.
