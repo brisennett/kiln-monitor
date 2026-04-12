@@ -7,8 +7,10 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from alerts import AlertRule, validate_rule
+from alerts import AlertEvent, AlertRule, validate_rule
 from config import DATABASE_PATH
+from notifiers import NotificationError, build_enabled_notifiers
+from storage.sqlite_logger import SQLiteLogger
 
 
 HOST = "0.0.0.0"
@@ -290,6 +292,25 @@ PAGE_HTML = """<!doctype html>
       color: #cbd5e1;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+    }
+    .test-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .test-status {
+      min-height: 1.2em;
+      margin-bottom: 12px;
+    }
+    .channel-health {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .pill-warning {
+      background: #7c2d12;
     }
     label {
       display: block;
@@ -576,6 +597,18 @@ PAGE_HTML = """<!doctype html>
               </div>
             </div>
 
+            <div class="channel-health" id="channelHealth">
+              <span class="pill">Loading channels...</span>
+            </div>
+
+            <div class="test-actions">
+              <button type="button" id="sendTestEmailButton">Send Test Email</button>
+              <button type="button" id="sendTestSmsButton">Send Test SMS</button>
+              <button type="button" id="sendTestPushButton">Send Test Push</button>
+              <button type="button" id="sendTestAllButton">Send All Configured</button>
+            </div>
+            <div class="subtle test-status" id="testAlertStatus"></div>
+
             <div class="rules-table-wrap">
               <table>
                 <thead>
@@ -647,6 +680,12 @@ PAGE_HTML = """<!doctype html>
     const rulesTableBody = document.getElementById("rulesTableBody");
     const deliveriesTableBody = document.getElementById("deliveriesTableBody");
     const deliveriesSummary = document.getElementById("deliveriesSummary");
+    const channelHealth = document.getElementById("channelHealth");
+    const testAlertStatus = document.getElementById("testAlertStatus");
+    const sendTestEmailButton = document.getElementById("sendTestEmailButton");
+    const sendTestSmsButton = document.getElementById("sendTestSmsButton");
+    const sendTestPushButton = document.getElementById("sendTestPushButton");
+    const sendTestAllButton = document.getElementById("sendTestAllButton");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const sidebarZone = document.getElementById("sidebarZone");
@@ -675,6 +714,7 @@ PAGE_HTML = """<!doctype html>
     const HISTORY_BUCKET_PRESETS = {"1h":[2,10,30,60,300],"24h":[60,300,600,900,1800],"7d":[300,600,1800,3600,10800]};
     let currentRules = [];
     let currentDeliveries = [];
+    let alertChannelStatus = {};
     let chartState = {
       points: [],
       plotPoints: [],
@@ -689,6 +729,22 @@ PAGE_HTML = """<!doctype html>
       alertTabPanels.forEach((panel) => {
         panel.hidden = panel.dataset.alertTabPanel !== tabName;
       });
+    }
+
+    function renderChannelHealth() {
+      const channels = ["EMAIL", "SMS", "PUSH"];
+      channelHealth.innerHTML = "";
+      channels.forEach((channel) => {
+        const configured = Boolean(alertChannelStatus[channel]);
+        const badge = document.createElement("span");
+        badge.className = `pill ${configured ? "pill-on" : "pill-warning"}`;
+        badge.textContent = configured ? `${channel} ready` : `${channel} not configured`;
+        channelHealth.appendChild(badge);
+      });
+      sendTestEmailButton.disabled = !alertChannelStatus.EMAIL;
+      sendTestSmsButton.disabled = !alertChannelStatus.SMS;
+      sendTestPushButton.disabled = !alertChannelStatus.PUSH;
+      sendTestAllButton.disabled = !Object.values(alertChannelStatus).some(Boolean);
     }
 
     function formatTimestamp(isoText) {
@@ -1400,6 +1456,32 @@ PAGE_HTML = """<!doctype html>
       });
     }
 
+    async function refreshAlertChannels() {
+      const response = await fetch("/api/alert-channels");
+      const payload = await response.json();
+      alertChannelStatus = payload.channels || {};
+      renderChannelHealth();
+    }
+
+    async function sendTestAlert(channels) {
+      testAlertStatus.textContent = "Sending test alert...";
+      const response = await fetch("/api/test-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channels }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        testAlertStatus.textContent = payload.error || "Failed to send test alert.";
+        return;
+      }
+
+      const sentCount = (payload.results || []).filter((result) => result.success).length;
+      const totalCount = (payload.results || []).length;
+      testAlertStatus.textContent = payload.message || `Sent ${sentCount} of ${totalCount} test alerts.`;
+      await refreshAlertDeliveries();
+    }
+
     async function refreshHistory() {
       const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
       const response = await fetch(`/api/history?${params.toString()}`);
@@ -1417,7 +1499,13 @@ PAGE_HTML = """<!doctype html>
 
     async function refreshAll() {
       try {
-        await Promise.all([refreshStatus(), refreshHistory(), refreshAlertRules(), refreshAlertDeliveries()]);
+        await Promise.all([
+          refreshStatus(),
+          refreshHistory(),
+          refreshAlertRules(),
+          refreshAlertDeliveries(),
+          refreshAlertChannels(),
+        ]);
       } catch (error) {
         banner.textContent = `Dashboard refresh failed: ${error}`;
         banner.className = "status-banner status-error";
@@ -1451,6 +1539,25 @@ PAGE_HTML = """<!doctype html>
       button.addEventListener("click", () => {
         setActiveAlertTab(button.dataset.alertTab);
       });
+    });
+
+    sendTestEmailButton.addEventListener("click", async () => {
+      await sendTestAlert(["EMAIL"]);
+    });
+
+    sendTestSmsButton.addEventListener("click", async () => {
+      await sendTestAlert(["SMS"]);
+    });
+
+    sendTestPushButton.addEventListener("click", async () => {
+      await sendTestAlert(["PUSH"]);
+    });
+
+    sendTestAllButton.addEventListener("click", async () => {
+      const channels = Object.entries(alertChannelStatus)
+        .filter(([, enabled]) => enabled)
+        .map(([channel]) => channel);
+      await sendTestAlert(channels);
     });
 
     unitSelect.addEventListener("change", async () => {
@@ -2053,6 +2160,104 @@ def fetch_alert_deliveries(limit: int = 50) -> dict:
     }
 
 
+def fetch_alert_channel_status() -> dict:
+    configured_channels = {
+        notifier.channel_name: True
+        for notifier in build_enabled_notifiers()
+    }
+    return {
+        "channels": {
+            "EMAIL": bool(configured_channels.get("EMAIL")),
+            "SMS": bool(configured_channels.get("SMS")),
+            "PUSH": bool(configured_channels.get("PUSH")),
+        }
+    }
+
+
+def send_test_alert(payload: dict) -> dict:
+    requested_channels = payload.get("channels", [])
+    if not isinstance(requested_channels, list) or not all(isinstance(item, str) for item in requested_channels):
+        raise ValueError("channels must be a list of strings")
+
+    normalized_channels = []
+    for channel in requested_channels:
+        normalized_channel = channel.strip().upper()
+        if normalized_channel not in {"EMAIL", "SMS", "PUSH"}:
+            raise ValueError(f"unsupported test alert channel: {channel}")
+        if normalized_channel not in normalized_channels:
+            normalized_channels.append(normalized_channel)
+
+    if not normalized_channels:
+        raise ValueError("at least one test alert channel is required")
+
+    now = datetime.now(timezone.utc)
+    alert = AlertEvent(
+        timestamp_utc=now.isoformat(),
+        level="INFO",
+        kind="TEST_ALERT",
+        detail="Dashboard test alert requested from the kiln monitor dashboard.",
+        temp_c=None,
+        temp_f=None,
+        rule_id=0,
+        rule_name="Dashboard Test Alert",
+    )
+    rule = AlertRule(
+        id=0,
+        name="Dashboard Test Alert",
+        enabled=True,
+        rule_type="TARGET_REACHED",
+        threshold_f=0.0,
+        severity="INFO",
+        hysteresis_f=0.0,
+        color_hex="#38bdf8",
+        notify_email="EMAIL" in normalized_channels,
+        notify_sms="SMS" in normalized_channels,
+        notify_push="PUSH" in normalized_channels,
+        active=False,
+        last_triggered_at=None,
+    )
+    notifiers = {
+        notifier.channel_name: notifier
+        for notifier in build_enabled_notifiers()
+    }
+
+    storage = SQLiteLogger(DATABASE_PATH)
+    results: list[dict] = []
+    try:
+        for channel in normalized_channels:
+            notifier = notifiers.get(channel)
+            if notifier is None:
+                detail = "channel is not configured globally"
+                storage.log_alert_delivery(alert, channel=channel, success=False, detail=detail)
+                results.append({"channel": channel, "success": False, "detail": detail})
+                continue
+
+            try:
+                result = notifier.send(alert, rule)
+                storage.log_alert_delivery(
+                    alert,
+                    channel=result.channel,
+                    success=result.success,
+                    detail=result.detail,
+                )
+                results.append(
+                    {"channel": result.channel, "success": result.success, "detail": result.detail}
+                )
+            except NotificationError as exc:
+                detail = str(exc)
+                storage.log_alert_delivery(alert, channel=channel, success=False, detail=detail)
+                results.append({"channel": channel, "success": False, "detail": detail})
+    finally:
+        storage.close()
+
+    success_count = sum(1 for result in results if result["success"])
+    return {
+        "ok": True,
+        "message": f"Test alert sent on {success_count} of {len(results)} requested channel(s).",
+        "results": results,
+    }
+
+
 def parse_alert_rule_payload(payload: dict) -> AlertRule:
     rule = AlertRule(
         id=None,
@@ -2259,6 +2464,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(fetch_alert_deliveries())
             return
 
+        if parsed_path.path == "/api/alert-channels":
+            self.send_json_response(fetch_alert_channel_status())
+            return
+
         if parsed_path.path == "/api/dashboard-preferences":
             self.send_json_response(fetch_dashboard_preferences())
             return
@@ -2291,6 +2500,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             if parsed_path.path == "/api/reset-alerts":
                 self.send_json_response(reset_alerts())
+                return
+
+            if parsed_path.path == "/api/test-alert":
+                self.send_json_response(send_test_alert(payload))
                 return
 
             if parsed_path.path.startswith("/api/alert-rules/") and parsed_path.path.endswith("/delete"):
