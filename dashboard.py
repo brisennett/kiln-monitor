@@ -89,22 +89,10 @@ PAGE_HTML = """<!doctype html>
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      align-items: end;
-      justify-content: space-between;
+      align-items: center;
+      justify-content: flex-end;
       margin-bottom: 16px;
-      padding: 16px;
-      border-radius: 16px;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-    }
-    .toolbar-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: end;
-    }
-    .toolbar-field {
-      min-width: 150px;
+      padding: 0;
     }
     .cards {
       display: grid;
@@ -230,6 +218,52 @@ PAGE_HTML = """<!doctype html>
       border-radius: 16px;
       padding: 16px;
       margin-top: 0;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 30;
+    }
+    .modal-backdrop[hidden] {
+      display: none;
+    }
+    .modal-panel {
+      width: min(720px, 100%);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.55);
+    }
+    .modal-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .modal-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      margin-bottom: 16px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-actions-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     .tab-strip {
       display: flex;
@@ -415,36 +449,54 @@ PAGE_HTML = """<!doctype html>
   <main>
     <h1>Kiln Monitor</h1>
     <section class="toolbar">
-      <div class="toolbar-group">
-        <div class="toolbar-field">
-          <label for="accentColorPicker">Accent Color</label>
-          <input id="accentColorPicker" class="color-input" type="color" value="#38bdf8" />
-        </div>
-        <div class="toolbar-field">
-          <label for="pageBgPicker">Page Background</label>
-          <input id="pageBgPicker" class="color-input" type="color" value="#0b1220" />
-        </div>
-        <div class="toolbar-field">
-          <label for="panelBgPicker">Panel Background</label>
-          <input id="panelBgPicker" class="color-input" type="color" value="#111827" />
-        </div>
-        <div class="toolbar-field">
-          <label for="unitSelect">Display Units</label>
-          <select id="unitSelect">
-            <option value="F">Fahrenheit</option>
-            <option value="C">Celsius</option>
-            <option value="BOTH">Both</option>
-          </select>
-        </div>
-      </div>
-      <div class="toolbar-group">
-        <button type="button" id="layoutToggle">Edit Layout</button>
-        <button type="button" id="resetColorsButton">Reset Colors</button>
-        <button type="button" id="resetFaultsButton">Reset Faults</button>
-        <button type="button" id="resetAlertsButton">Reset Alerts</button>
-      </div>
+      <button type="button" id="openSetupButton">Dashboard Setup</button>
+      <button type="button" id="resetFaultsButton">Reset Faults</button>
+      <button type="button" id="resetAlertsButton">Reset Alerts</button>
     </section>
     <div id="statusBanner" class="status-banner">Loading...</div>
+
+    <div id="setupModal" class="modal-backdrop" hidden>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="setupModalTitle">
+        <div class="modal-header">
+          <div>
+            <div class="label" id="setupModalTitle">Dashboard Setup</div>
+            <div class="subtle">Adjust colors, units, and layout when you need to, then tuck it away.</div>
+          </div>
+          <button type="button" id="closeSetupButton">Close</button>
+        </div>
+
+        <div class="modal-grid">
+          <div>
+            <label for="accentColorPicker">Accent Color</label>
+            <input id="accentColorPicker" class="color-input" type="color" value="#38bdf8" />
+          </div>
+          <div>
+            <label for="pageBgPicker">Page Background</label>
+            <input id="pageBgPicker" class="color-input" type="color" value="#0b1220" />
+          </div>
+          <div>
+            <label for="panelBgPicker">Panel Background</label>
+            <input id="panelBgPicker" class="color-input" type="color" value="#111827" />
+          </div>
+          <div>
+            <label for="unitSelect">Display Units</label>
+            <select id="unitSelect">
+              <option value="F">Fahrenheit</option>
+              <option value="C">Celsius</option>
+              <option value="BOTH">Both</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <div class="modal-actions-group">
+            <button type="button" id="layoutToggle">Edit Layout</button>
+            <button type="button" id="resetColorsButton">Reset Colors</button>
+          </div>
+          <div class="subtle">Drag cards between zones while layout edit mode is on.</div>
+        </div>
+      </section>
+    </div>
 
     <div class="layout-shell">
       <div class="main-column">
@@ -494,11 +546,11 @@ PAGE_HTML = """<!doctype html>
           </div>
 
           <div class="tab-strip" role="tablist" aria-label="Alerting tabs">
-            <button type="button" class="tab-button active" data-alert-tab="rules" role="tab" aria-selected="true">Rules</button>
-            <button type="button" class="tab-button" data-alert-tab="deliveries" role="tab" aria-selected="false">Deliveries</button>
+            <button type="button" class="tab-button" data-alert-tab="log" role="tab" aria-selected="false">Alert Log</button>
+            <button type="button" class="tab-button active" data-alert-tab="setup" role="tab" aria-selected="true">Alert Setup</button>
           </div>
 
-          <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="rules">
+          <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="setup">
             <form id="ruleForm">
               <div class="rules-grid">
                 <div>
@@ -589,11 +641,11 @@ PAGE_HTML = """<!doctype html>
             </div>
           </section>
 
-          <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="deliveries" hidden>
+          <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="log" hidden>
             <div class="tab-panel-header">
               <div>
-                <div class="label">Recent Deliveries</div>
-                <div class="delivery-summary" id="deliveriesSummary">Checking recent alert sends...</div>
+                <div class="label">Alert Log</div>
+                <div class="delivery-summary" id="deliveriesSummary">Checking recent alert activity and delivery attempts...</div>
               </div>
             </div>
 
@@ -695,6 +747,9 @@ PAGE_HTML = """<!doctype html>
     const resolutionSelect = document.getElementById("resolutionSelect");
     const unitSelect = document.getElementById("unitSelect");
     const layoutToggle = document.getElementById("layoutToggle");
+    const openSetupButton = document.getElementById("openSetupButton");
+    const closeSetupButton = document.getElementById("closeSetupButton");
+    const setupModal = document.getElementById("setupModal");
     const accentColorPicker = document.getElementById("accentColorPicker");
     const pageBgPicker = document.getElementById("pageBgPicker");
     const panelBgPicker = document.getElementById("panelBgPicker");
@@ -729,6 +784,10 @@ PAGE_HTML = """<!doctype html>
       alertTabPanels.forEach((panel) => {
         panel.hidden = panel.dataset.alertTabPanel !== tabName;
       });
+    }
+
+    function setSetupModalOpen(isOpen) {
+      setupModal.hidden = !isOpen;
     }
 
     function renderChannelHealth() {
@@ -1432,11 +1491,11 @@ PAGE_HTML = """<!doctype html>
       currentDeliveries = deliveries;
 
       deliveriesSummary.textContent = deliveries.length
-        ? `${deliveries.length} recent delivery attempts. Use this tab to confirm alert sends are actually making it out.`
-        : "No delivery attempts have been logged yet.";
+        ? `${deliveries.length} recent alert log entries. Use this tab to confirm alert sends are actually making it out.`
+        : "No alert log entries have been recorded yet.";
 
       if (!deliveries.length) {
-        deliveriesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No delivery attempts logged yet.</td></tr>';
+        deliveriesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No alert log entries recorded yet.</td></tr>';
         return;
       }
 
@@ -1578,6 +1637,26 @@ PAGE_HTML = """<!doctype html>
       setLayoutEditEnabled(!layoutEditEnabled);
     });
 
+    openSetupButton.addEventListener("click", () => {
+      setSetupModalOpen(true);
+    });
+
+    closeSetupButton.addEventListener("click", () => {
+      setSetupModalOpen(false);
+    });
+
+    setupModal.addEventListener("click", (event) => {
+      if (event.target === setupModal) {
+        setSetupModalOpen(false);
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !setupModal.hidden) {
+        setSetupModalOpen(false);
+      }
+    });
+
     accentColorPicker.addEventListener("input", () => { void saveTheme(); });
     pageBgPicker.addEventListener("input", () => { void saveTheme(); });
     panelBgPicker.addEventListener("input", () => { void saveTheme(); });
@@ -1655,7 +1734,8 @@ PAGE_HTML = """<!doctype html>
     populateResolutionOptions();
     window.addEventListener("resize", refreshHistory);
     resetRuleForm();
-    setActiveAlertTab("rules");
+    setActiveAlertTab("setup");
+    setSetupModalOpen(false);
     setLayoutEditEnabled(false);
     loadDashboardPreferences().then(refreshAll);
     setInterval(refreshAll, 5000);
