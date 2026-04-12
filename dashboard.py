@@ -110,6 +110,44 @@ PAGE_HTML = """<!doctype html>
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       margin-bottom: 20px;
     }
+    .layout-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1.85fr) minmax(280px, 0.95fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .main-column {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+    }
+    .sidebar-column {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+    }
+    .layout-zone {
+      display: grid;
+      gap: 12px;
+      min-height: 72px;
+    }
+    .layout-zone.layout-zone-cards {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    .layout-zone.drag-target-zone {
+      outline: 2px dashed var(--accent-color);
+      outline-offset: 8px;
+      border-radius: 18px;
+    }
+    .zone-label {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
     .card {
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
@@ -277,6 +315,9 @@ PAGE_HTML = """<!doctype html>
       body {
         padding: 14px;
       }
+      .layout-shell {
+        grid-template-columns: 1fr;
+      }
       .toolbar {
         padding: 14px;
       }
@@ -317,7 +358,123 @@ PAGE_HTML = """<!doctype html>
     </section>
     <div id="statusBanner" class="status-banner">Loading...</div>
 
-    <section class="cards" id="cardsGrid">
+    <div class="layout-shell">
+      <div class="main-column">
+        <section>
+          <div class="zone-label">Top Summary</div>
+          <div class="layout-zone layout-zone-cards" id="topSummaryZone" data-zone-id="top-summary"></div>
+        </section>
+
+        <section class="chart-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Temperature Trend</div>
+              <div class="subtle" id="chartMeta">--</div>
+            </div>
+            <div class="range-buttons">
+              <select id="resolutionSelect" aria-label="Chart resolution">
+                <option value="auto">Auto</option>
+              </select>
+              <button type="button" id="smoothToggle" class="active">Smooth</button>
+              <button type="button" data-range="1h">1h</button>
+              <button type="button" data-range="24h" class="active">24h</button>
+              <button type="button" data-range="7d">7d</button>
+            </div>
+          </div>
+          <canvas id="tempChart"></canvas>
+          <div class="subtle">Red dots mark fault samples. Gaps show periods where no valid temperature was logged.</div>
+        </section>
+
+        <section>
+          <div class="zone-label">Below Chart</div>
+          <div class="layout-zone layout-zone-cards" id="belowChartZone" data-zone-id="below-chart"></div>
+        </section>
+      </div>
+
+      <aside class="sidebar-column">
+        <section>
+          <div class="zone-label">Sidebar</div>
+          <div class="layout-zone layout-zone-cards" id="sidebarZone" data-zone-id="sidebar"></div>
+        </section>
+
+        <section class="rules-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Alert Rules</div>
+              <div class="subtle">Configure milestone alerts and high/low safety alerts from the browser.</div>
+            </div>
+          </div>
+
+          <form id="ruleForm">
+            <div class="rules-grid">
+              <div>
+                <label for="ruleName">Name</label>
+                <input id="ruleName" name="name" placeholder="Cone 06 reached" required />
+              </div>
+              <div>
+                <label for="ruleType">Type</label>
+                <select id="ruleType" name="rule_type">
+                  <option value="TARGET_REACHED">Target Reached</option>
+                  <option value="ABOVE_HIGH">Above High</option>
+                  <option value="BELOW_LOW">Below Low</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleThreshold">Threshold F</label>
+                <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
+              </div>
+              <div>
+                <label for="ruleSeverity">Severity</label>
+                <select id="ruleSeverity" name="severity">
+                  <option value="INFO">Info</option>
+                  <option value="WARNING" selected>Warning</option>
+                  <option value="CRITICAL">Critical</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleHysteresis">Reset Gap F</label>
+                <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
+              </div>
+              <div>
+                <label for="ruleEnabled">Enabled</label>
+                <select id="ruleEnabled" name="enabled">
+                  <option value="true" selected>Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleColor">Accent Color</label>
+                <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
+              </div>
+            </div>
+            <div class="rule-actions">
+              <button type="submit" id="ruleSubmit">Add Rule</button>
+              <button type="button" id="ruleCancel">Cancel Edit</button>
+            </div>
+            <div id="ruleError" class="error-text"></div>
+          </form>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Threshold</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Last Triggered</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rulesTableBody">
+              <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </aside>
+    </div>
+
+    <div id="cardTemplates" hidden>
       <div class="card" data-card-id="latest-temp">
         <div class="label">Latest Temperature</div>
         <div class="value" id="latestTemp">--</div>
@@ -348,102 +505,7 @@ PAGE_HTML = """<!doctype html>
           <button type="button" class="mini-button" id="inlineResetAlertsButton">Reset Alerts</button>
         </div>
       </div>
-    </section>
-
-    <section class="chart-panel">
-      <div class="chart-top">
-        <div>
-          <div class="label">Temperature Trend</div>
-          <div class="subtle" id="chartMeta">--</div>
-        </div>
-        <div class="range-buttons">
-          <select id="resolutionSelect" aria-label="Chart resolution">
-            <option value="auto">Auto</option>
-          </select>
-          <button type="button" id="smoothToggle" class="active">Smooth</button>
-          <button type="button" data-range="1h">1h</button>
-          <button type="button" data-range="24h" class="active">24h</button>
-          <button type="button" data-range="7d">7d</button>
-        </div>
-      </div>
-      <canvas id="tempChart"></canvas>
-      <div class="subtle">Red dots mark fault samples. Gaps show periods where no valid temperature was logged.</div>
-    </section>
-
-    <section class="rules-panel">
-      <div class="chart-top">
-        <div>
-          <div class="label">Alert Rules</div>
-          <div class="subtle">Configure milestone alerts and high/low safety alerts from the browser.</div>
-        </div>
-      </div>
-
-      <form id="ruleForm">
-        <div class="rules-grid">
-          <div>
-            <label for="ruleName">Name</label>
-            <input id="ruleName" name="name" placeholder="Cone 06 reached" required />
-          </div>
-          <div>
-            <label for="ruleType">Type</label>
-            <select id="ruleType" name="rule_type">
-              <option value="TARGET_REACHED">Target Reached</option>
-              <option value="ABOVE_HIGH">Above High</option>
-              <option value="BELOW_LOW">Below Low</option>
-            </select>
-          </div>
-          <div>
-            <label for="ruleThreshold">Threshold F</label>
-            <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
-          </div>
-          <div>
-            <label for="ruleSeverity">Severity</label>
-            <select id="ruleSeverity" name="severity">
-              <option value="INFO">Info</option>
-              <option value="WARNING" selected>Warning</option>
-              <option value="CRITICAL">Critical</option>
-            </select>
-          </div>
-          <div>
-            <label for="ruleHysteresis">Reset Gap F</label>
-            <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
-          </div>
-          <div>
-            <label for="ruleEnabled">Enabled</label>
-            <select id="ruleEnabled" name="enabled">
-              <option value="true" selected>Enabled</option>
-              <option value="false">Disabled</option>
-            </select>
-          </div>
-          <div>
-            <label for="ruleColor">Accent Color</label>
-            <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
-          </div>
-        </div>
-        <div class="rule-actions">
-          <button type="submit" id="ruleSubmit">Add Rule</button>
-          <button type="button" id="ruleCancel">Cancel Edit</button>
-        </div>
-        <div id="ruleError" class="error-text"></div>
-      </form>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Threshold</th>
-            <th>Severity</th>
-            <th>Status</th>
-            <th>Last Triggered</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="rulesTableBody">
-          <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
-        </tbody>
-      </table>
-    </section>
+    </div>
   </main>
 
   <script>
@@ -460,7 +522,10 @@ PAGE_HTML = """<!doctype html>
     const ruleCancel = document.getElementById("ruleCancel");
     const ruleError = document.getElementById("ruleError");
     const rulesTableBody = document.getElementById("rulesTableBody");
-    const cardsGrid = document.getElementById("cardsGrid");
+    const topSummaryZone = document.getElementById("topSummaryZone");
+    const belowChartZone = document.getElementById("belowChartZone");
+    const sidebarZone = document.getElementById("sidebarZone");
+    const layoutZones = [topSummaryZone, belowChartZone, sidebarZone];
     const canvas = document.getElementById("tempChart");
     const ctx = canvas.getContext("2d");
     const resolutionSelect = document.getElementById("resolutionSelect");
@@ -584,25 +649,52 @@ PAGE_HTML = """<!doctype html>
       }
     }
 
-    function applyCardOrder(order) {
-      const cards = Array.from(cardsGrid.querySelectorAll(".card"));
+    function defaultCardLayout() {
+      return {
+        "top-summary": ["latest-temp", "last-update", "sample-age", "total-rows"],
+        "below-chart": ["last-fault"],
+        "sidebar": ["last-alert"],
+      };
+    }
+
+    function getAllCards() {
+      return Array.from(document.querySelectorAll(".card[data-card-id]"));
+    }
+
+    function applyCardLayout(layout) {
+      const normalizedLayout = layout || defaultCardLayout();
+      const cards = getAllCards();
       const cardById = new Map(cards.map((card) => [card.dataset.cardId, card]));
-      order.forEach((cardId) => {
-        const card = cardById.get(cardId);
-        if (card) {
-          cardsGrid.appendChild(card);
-          cardById.delete(cardId);
-        }
+      layoutZones.forEach((zone) => {
+        zone.innerHTML = "";
       });
-      cardById.forEach((card) => cardsGrid.appendChild(card));
+      ["top-summary", "below-chart", "sidebar"].forEach((zoneId) => {
+        const zone = layoutZones.find((item) => item.dataset.zoneId === zoneId);
+        const cardIds = normalizedLayout[zoneId] || [];
+        cardIds.forEach((cardId) => {
+          const card = cardById.get(cardId);
+          if (card && zone) {
+            zone.appendChild(card);
+            cardById.delete(cardId);
+          }
+        });
+      });
+      cardById.forEach((card) => topSummaryZone.appendChild(card));
+    }
+
+    function currentCardLayout() {
+      const layout = {};
+      layoutZones.forEach((zone) => {
+        layout[zone.dataset.zoneId] = Array.from(zone.querySelectorAll(".card")).map((card) => card.dataset.cardId);
+      });
+      return layout;
     }
 
     async function saveCardOrder() {
-      const order = Array.from(cardsGrid.querySelectorAll(".card")).map((card) => card.dataset.cardId);
       await fetch("/api/dashboard-preferences", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ card_order: order }),
+        body: JSON.stringify({ card_order: currentCardLayout() }),
       });
     }
 
@@ -610,7 +702,7 @@ PAGE_HTML = """<!doctype html>
       layoutEditEnabled = enabled;
       layoutToggle.classList.toggle("active", enabled);
       layoutToggle.textContent = enabled ? "Done Editing" : "Edit Layout";
-      cardsGrid.querySelectorAll(".card").forEach((card) => {
+      getAllCards().forEach((card) => {
         card.draggable = enabled;
         card.classList.toggle("layout-edit", enabled);
       });
@@ -618,7 +710,7 @@ PAGE_HTML = """<!doctype html>
 
     function setupCardDragAndDrop() {
       let draggedCard = null;
-      cardsGrid.querySelectorAll(".card").forEach((card) => {
+      getAllCards().forEach((card) => {
         card.addEventListener("dragstart", () => {
           if (!layoutEditEnabled) {
             return;
@@ -628,7 +720,8 @@ PAGE_HTML = """<!doctype html>
         });
         card.addEventListener("dragend", () => {
           card.classList.remove("dragging");
-          cardsGrid.querySelectorAll(".card").forEach((item) => item.classList.remove("drag-target"));
+          getAllCards().forEach((item) => item.classList.remove("drag-target"));
+          layoutZones.forEach((zone) => zone.classList.remove("drag-target-zone"));
           if (draggedCard) {
             void saveCardOrder();
           }
@@ -639,18 +732,42 @@ PAGE_HTML = """<!doctype html>
             return;
           }
           event.preventDefault();
-          cardsGrid.querySelectorAll(".card").forEach((item) => item.classList.remove("drag-target"));
+          getAllCards().forEach((item) => item.classList.remove("drag-target"));
           card.classList.add("drag-target");
           const rect = card.getBoundingClientRect();
           const before = event.clientY < rect.top + rect.height / 2;
           if (before) {
-            cardsGrid.insertBefore(draggedCard, card);
+            card.parentElement.insertBefore(draggedCard, card);
           } else {
-            cardsGrid.insertBefore(draggedCard, card.nextSibling);
+            card.parentElement.insertBefore(draggedCard, card.nextSibling);
           }
         });
         card.addEventListener("dragleave", () => {
           card.classList.remove("drag-target");
+        });
+      });
+
+      layoutZones.forEach((zone) => {
+        zone.addEventListener("dragover", (event) => {
+          if (!layoutEditEnabled || !draggedCard) {
+            return;
+          }
+          event.preventDefault();
+          zone.classList.add("drag-target-zone");
+          if (!zone.querySelector(".card")) {
+            zone.appendChild(draggedCard);
+          }
+        });
+        zone.addEventListener("dragleave", () => {
+          zone.classList.remove("drag-target-zone");
+        });
+        zone.addEventListener("drop", (event) => {
+          if (!layoutEditEnabled || !draggedCard) {
+            return;
+          }
+          event.preventDefault();
+          zone.classList.remove("drag-target-zone");
+          zone.appendChild(draggedCard);
         });
       });
     }
@@ -673,7 +790,9 @@ PAGE_HTML = """<!doctype html>
         applyTheme(null);
       }
       if (Array.isArray(payload.card_order)) {
-        applyCardOrder(payload.card_order);
+        applyCardLayout(payload.card_order);
+      } else {
+        applyCardLayout(defaultCardLayout());
       }
     }
 
