@@ -10,6 +10,14 @@ from urllib.parse import parse_qs, urlparse
 from alerts import AlertEvent, AlertRule, validate_rule
 from config import DATABASE_PATH, WATCHDOG_FAULT_STREAK_THRESHOLD, WATCHDOG_NOTIFY_COOLDOWN_MINUTES, WATCHDOG_STALE_DATA_SECONDS
 from notifiers import NotificationError, build_enabled_notifiers, default_alert_channel_settings, load_alert_channel_settings
+from profiles import (
+    FiringProfile,
+    ProfileSegment,
+    expected_profile_state,
+    generate_profile_overlay,
+    profile_to_payload,
+    validate_profile,
+)
 from storage.sqlite_logger import SQLiteLogger
 
 
@@ -409,6 +417,56 @@ PAGE_HTML = """<!doctype html>
       gap: 12px;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       margin-top: 12px;
+    }
+    .profiles-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .profile-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .profile-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .profile-summary-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .profile-summary-card .value {
+      font-size: 1rem;
+    }
+    .profile-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 12px;
+    }
+    .profile-segments-table input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .profile-segments-table td {
+      vertical-align: top;
+    }
+    .profile-list-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .profile-empty {
+      color: #9ca3af;
+      padding: 12px 0;
     }
     label {
       display: block;
@@ -883,6 +941,106 @@ PAGE_HTML = """<!doctype html>
             </div>
           </section>
         </section>
+
+        <section class="profiles-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Profiles</div>
+              <div class="subtle">Track a planned firing profile now so the monitor can show expected progression before we ever touch control logic.</div>
+            </div>
+          </div>
+
+          <div id="profileStatusMessage" class="success-text"></div>
+
+          <div class="profile-summary" id="activeProfileSummary">
+            <div class="profile-summary-card">
+              <div class="label">Tracking</div>
+              <div class="value" id="activeProfileName">No active profile</div>
+            </div>
+            <div class="profile-summary-card">
+              <div class="label">Segment</div>
+              <div class="value" id="activeProfileSegment">--</div>
+            </div>
+            <div class="profile-summary-card">
+              <div class="label">Expected Temp</div>
+              <div class="value" id="activeProfileExpectedTemp">--</div>
+            </div>
+            <div class="profile-summary-card">
+              <div class="label">Elapsed</div>
+              <div class="value" id="activeProfileElapsed">--</div>
+            </div>
+          </div>
+
+          <div class="profile-toolbar">
+            <button type="button" id="profileStopButton">Stop Tracking</button>
+            <button type="button" id="profileRefreshButton">Reload Profiles</button>
+          </div>
+
+          <hr class="panel-divider" />
+
+          <form id="profileForm">
+            <div class="profile-grid">
+              <div>
+                <label for="profileName">Profile Name</label>
+                <input id="profileName" type="text" placeholder="Cone 06 glaze" required />
+              </div>
+              <div>
+                <label for="profileCone">Cone</label>
+                <input id="profileCone" type="text" placeholder="06" />
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label for="profileDescription">Description</label>
+                <input id="profileDescription" type="text" placeholder="Low-fire glaze schedule with hold at top." />
+              </div>
+            </div>
+
+            <div class="profile-toolbar">
+              <button type="button" id="addSegmentButton">Add Segment</button>
+            </div>
+
+            <div class="rules-table-wrap profile-segments-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Segment</th>
+                    <th>Target C</th>
+                    <th>Ramp C/hr</th>
+                    <th>Soak Min</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="profileSegmentsBody">
+                  <tr><td colspan="5" class="subtle">Add at least one segment.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="profile-toolbar">
+              <button type="submit" id="profileSubmit">Save Profile</button>
+              <button type="button" id="profileCancel">Cancel Edit</button>
+            </div>
+            <div id="profileError" class="error-text"></div>
+          </form>
+
+          <hr class="panel-divider" />
+
+          <div class="rules-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Cone</th>
+                  <th>Segments</th>
+                  <th>Duration</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="profilesTableBody">
+                <tr><td colspan="5" class="subtle">Loading profiles...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </aside>
     </div>
 
@@ -917,6 +1075,10 @@ PAGE_HTML = """<!doctype html>
           <button type="button" class="mini-button" id="inlineResetAlertsButton">Reset Alerts</button>
         </div>
       </div>
+      <div class="card" data-card-id="active-profile">
+        <div class="label">Active Profile</div>
+        <div class="value" id="activeProfileCard">none</div>
+      </div>
     </div>
   </main>
 
@@ -928,6 +1090,7 @@ PAGE_HTML = """<!doctype html>
     const lastFault = document.getElementById("lastFault");
     const totalRows = document.getElementById("totalRows");
     const lastAlert = document.getElementById("lastAlert");
+    const activeProfileCard = document.getElementById("activeProfileCard");
     const chartMeta = document.getElementById("chartMeta");
     const ruleForm = document.getElementById("ruleForm");
     const ruleSubmit = document.getElementById("ruleSubmit");
@@ -962,6 +1125,20 @@ PAGE_HTML = """<!doctype html>
     const saveWatchdogSettingsButton = document.getElementById("saveWatchdogSettingsButton");
     const resetWatchdogSettingsButton = document.getElementById("resetWatchdogSettingsButton");
     const watchdogSettingsStatus = document.getElementById("watchdogSettingsStatus");
+    const profileForm = document.getElementById("profileForm");
+    const profileSubmit = document.getElementById("profileSubmit");
+    const profileCancel = document.getElementById("profileCancel");
+    const profileError = document.getElementById("profileError");
+    const profileSegmentsBody = document.getElementById("profileSegmentsBody");
+    const profilesTableBody = document.getElementById("profilesTableBody");
+    const addSegmentButton = document.getElementById("addSegmentButton");
+    const profileStopButton = document.getElementById("profileStopButton");
+    const profileRefreshButton = document.getElementById("profileRefreshButton");
+    const profileStatusMessage = document.getElementById("profileStatusMessage");
+    const activeProfileName = document.getElementById("activeProfileName");
+    const activeProfileSegment = document.getElementById("activeProfileSegment");
+    const activeProfileExpectedTemp = document.getElementById("activeProfileExpectedTemp");
+    const activeProfileElapsed = document.getElementById("activeProfileElapsed");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const sidebarZone = document.getElementById("sidebarZone");
@@ -996,9 +1173,14 @@ PAGE_HTML = """<!doctype html>
     let alertChannelStatus = {};
     let alertChannelSettings = {};
     let watchdogSettings = {};
+    let currentProfiles = [];
+    let currentProfileRun = null;
+    let editingProfileId = null;
+    let editingProfileSegments = [];
     let chartState = {
       points: [],
       plotPoints: [],
+      overlayPoints: [],
     };
 
     function setActiveAlertTab(tabName) {
@@ -1202,6 +1384,93 @@ PAGE_HTML = """<!doctype html>
       ruleHysteresisLabel.textContent = `Reset Gap ${suffix}`;
     }
 
+    function formatDuration(seconds) {
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        return "0m";
+      }
+      const totalMinutes = Math.round(seconds / 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours <= 0) {
+        return `${minutes}m`;
+      }
+      return `${hours}h ${minutes}m`;
+    }
+
+    function emptyProfileSegment() {
+      return {
+        name: "",
+        target_temp_c: 999,
+        ramp_rate_c_per_hour: 120,
+        soak_minutes: 0,
+      };
+    }
+
+    function resetProfileForm() {
+      editingProfileId = null;
+      editingProfileSegments = [emptyProfileSegment()];
+      document.getElementById("profileName").value = "";
+      document.getElementById("profileCone").value = "";
+      document.getElementById("profileDescription").value = "";
+      profileSubmit.textContent = "Save Profile";
+      profileError.textContent = "";
+      renderProfileSegmentsEditor();
+    }
+
+    function renderProfileSegmentsEditor() {
+      if (!editingProfileSegments.length) {
+        profileSegmentsBody.innerHTML = '<tr><td colspan="5" class="subtle">Add at least one segment.</td></tr>';
+        return;
+      }
+
+      profileSegmentsBody.innerHTML = "";
+      editingProfileSegments.forEach((segment, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input type="text" data-segment-field="name" data-segment-index="${index}" value="${segment.name || ""}" placeholder="Warmup" /></td>
+          <td><input type="number" step="0.1" data-segment-field="target_temp_c" data-segment-index="${index}" value="${Number(segment.target_temp_c ?? 0)}" /></td>
+          <td><input type="number" step="0.1" min="0.1" data-segment-field="ramp_rate_c_per_hour" data-segment-index="${index}" value="${Number(segment.ramp_rate_c_per_hour ?? 0)}" /></td>
+          <td><input type="number" step="0.1" min="0" data-segment-field="soak_minutes" data-segment-index="${index}" value="${Number(segment.soak_minutes ?? 0)}" /></td>
+          <td><button type="button" data-remove-segment="${index}">Remove</button></td>
+        `;
+        profileSegmentsBody.appendChild(row);
+      });
+
+      profileSegmentsBody.querySelectorAll("[data-segment-field]").forEach((input) => {
+        input.addEventListener("input", (event) => {
+          const target = event.target;
+          const index = Number(target.dataset.segmentIndex);
+          const field = target.dataset.segmentField;
+          const rawValue = target.value;
+          editingProfileSegments[index][field] = field === "name" ? rawValue : Number(rawValue);
+        });
+      });
+
+      profileSegmentsBody.querySelectorAll("[data-remove-segment]").forEach((button) => {
+        button.addEventListener("click", () => {
+          editingProfileSegments = editingProfileSegments.filter((_, index) => index !== Number(button.dataset.removeSegment));
+          if (!editingProfileSegments.length) {
+            editingProfileSegments = [emptyProfileSegment()];
+          }
+          renderProfileSegmentsEditor();
+        });
+      });
+    }
+
+    function gatherProfilePayload() {
+      return {
+        name: document.getElementById("profileName").value.trim(),
+        cone: document.getElementById("profileCone").value.trim(),
+        description: document.getElementById("profileDescription").value.trim(),
+        segments: editingProfileSegments.map((segment) => ({
+          name: String(segment.name || "").trim(),
+          target_temp_c: Number(segment.target_temp_c),
+          ramp_rate_c_per_hour: Number(segment.ramp_rate_c_per_hour),
+          soak_minutes: Number(segment.soak_minutes || 0),
+        })),
+      };
+    }
+
     function resetRuleForm() {
       editingRuleId = null;
       ruleForm.reset();
@@ -1301,7 +1570,7 @@ PAGE_HTML = """<!doctype html>
       return {
         "top-summary": ["latest-temp", "last-update", "sample-age", "total-rows"],
         "below-chart": ["last-fault"],
-        "sidebar": ["last-alert"],
+        "sidebar": ["last-alert", "active-profile"],
       };
     }
 
@@ -1553,7 +1822,7 @@ PAGE_HTML = """<!doctype html>
       ctx.fillText(formatTimestamp(nearest.timestamp_utc), boxX + 12, boxY + 42);
     }
 
-    function drawChart(points) {
+    function drawChart(points, overlayPoints = []) {
       const displayPoints = smoothingEnabled
         ? smoothPoints(points, 12)
         : points;
@@ -1573,6 +1842,7 @@ PAGE_HTML = """<!doctype html>
       chartState = {
         points,
         plotPoints: [],
+        overlayPoints,
         top,
         plotHeight,
       };
@@ -1583,7 +1853,7 @@ PAGE_HTML = """<!doctype html>
       ctx.lineWidth = 1;
       ctx.strokeRect(left, top, plotWidth, plotHeight);
 
-      if (!displayPoints.length) {
+      if (!displayPoints.length && !overlayPoints.length) {
         ctx.fillStyle = "#9ca3af";
         ctx.font = "14px system-ui, sans-serif";
         ctx.fillText("No samples in this window yet.", left + 12, top + 28);
@@ -1591,14 +1861,19 @@ PAGE_HTML = """<!doctype html>
         return;
       }
 
-      const times = displayPoints.map((point) => new Date(point.timestamp_utc).getTime());
+      const timeSourcePoints = displayPoints.length ? displayPoints : overlayPoints;
+      const times = timeSourcePoints.map((point) => new Date(point.timestamp_utc).getTime());
       const validTemps = displayPoints
+        .map((point) => displayTempFromStoredF(point.temp_f))
+        .filter((temp) => temp !== null && Number.isFinite(temp));
+      const overlayTemps = overlayPoints
         .map((point) => displayTempFromStoredF(point.temp_f))
         .filter((temp) => temp !== null && Number.isFinite(temp));
       const minTime = Math.min(...times);
       const maxTime = Math.max(...times);
-      const minTemp = validTemps.length ? Math.min(...validTemps) : 0;
-      const maxTemp = validTemps.length ? Math.max(...validTemps) : 1;
+      const combinedTemps = [...validTemps, ...overlayTemps];
+      const minTemp = combinedTemps.length ? Math.min(...combinedTemps) : 0;
+      const maxTemp = combinedTemps.length ? Math.max(...combinedTemps) : 1;
       let paddedMinTemp = minTemp === maxTemp ? minTemp - 1 : minTemp - Math.max(1, (maxTemp - minTemp) * 0.08);
       let paddedMaxTemp = minTemp === maxTemp ? maxTemp + 1 : maxTemp + Math.max(1, (maxTemp - minTemp) * 0.08);
       if ((paddedMaxTemp - paddedMinTemp) < 20.0) {
@@ -1665,6 +1940,32 @@ PAGE_HTML = """<!doctype html>
       });
       ctx.stroke();
 
+      if (overlayPoints.length) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(248, 250, 252, 0.75)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        let overlayOpen = false;
+        overlayPoints.forEach((point) => {
+          const displayTemp = displayTempFromStoredF(point.temp_f);
+          if (displayTemp === null || !Number.isFinite(displayTemp)) {
+            overlayOpen = false;
+            return;
+          }
+          const x = xFor(new Date(point.timestamp_utc).getTime());
+          const y = yFor(displayTemp);
+          if (!overlayOpen) {
+            ctx.moveTo(x, y);
+            overlayOpen = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+        ctx.restore();
+      }
+
       displayPoints.forEach((point) => {
         if (point.status !== "ERROR") {
           return;
@@ -1677,12 +1978,12 @@ PAGE_HTML = """<!doctype html>
       });
 
       ctx.fillStyle = "#9ca3af";
-      ctx.fillText(formatTimestamp(displayPoints[0].timestamp_utc), left, height - 12);
-      const endLabel = formatTimestamp(displayPoints[displayPoints.length - 1].timestamp_utc);
+      ctx.fillText(formatTimestamp(timeSourcePoints[0].timestamp_utc), left, height - 12);
+      const endLabel = formatTimestamp(timeSourcePoints[timeSourcePoints.length - 1].timestamp_utc);
       const endWidth = ctx.measureText(endLabel).width;
       ctx.fillText(endLabel, left + plotWidth - endWidth, height - 12);
 
-      if (validTemps.length) {
+      if (combinedTemps.length) {
         const modeLabel = smoothingEnabled ? "smoothed" : "raw";
         chartMeta.textContent = `${displayPoints.length} samples, ${minTemp.toFixed(1)} ${unitSuffix()} to ${maxTemp.toFixed(1)} ${unitSuffix()}, ${modeLabel}`;
       } else {
@@ -1707,6 +2008,7 @@ PAGE_HTML = """<!doctype html>
         sampleAge.textContent = "--";
         lastFault.textContent = payload.latest_fault ? payload.latest_fault.detail : "none";
         lastAlert.textContent = payload.latest_alert ? payload.latest_alert.detail : "none";
+        activeProfileCard.textContent = payload.active_profile_run ? payload.active_profile_run.name : "none";
         return;
       }
 
@@ -1724,6 +2026,111 @@ PAGE_HTML = """<!doctype html>
       lastAlert.textContent = payload.latest_alert
         ? `${payload.latest_alert.level}: ${payload.latest_alert.rule_name || payload.latest_alert.kind.toLowerCase()}`
         : "none";
+      activeProfileCard.textContent = payload.active_profile_run
+        ? `${payload.active_profile_run.name} (${payload.active_profile_run.phase})`
+        : "none";
+    }
+
+    function renderActiveProfileSummary(run) {
+      currentProfileRun = run || null;
+      if (!run) {
+        activeProfileName.textContent = "No active profile";
+        activeProfileSegment.textContent = "--";
+        activeProfileExpectedTemp.textContent = "--";
+        activeProfileElapsed.textContent = "--";
+        profileStopButton.disabled = true;
+        return;
+      }
+
+      activeProfileName.textContent = run.name || "Tracked Profile";
+      activeProfileSegment.textContent = `${run.segment_name || "--"} (${run.phase || "--"})`;
+      activeProfileExpectedTemp.textContent = formatPrimaryTemperature(run.expected_temp_f, run.expected_temp_c);
+      activeProfileElapsed.textContent = formatDuration(run.elapsed_seconds || 0);
+      profileStopButton.disabled = false;
+    }
+
+    async function refreshProfiles() {
+      const response = await fetch("/api/profiles");
+      const payload = await response.json();
+      currentProfiles = payload.profiles || [];
+      renderActiveProfileSummary(payload.active_run || null);
+
+      if (!currentProfiles.length) {
+        profilesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No firing profiles created yet.</td></tr>';
+        return;
+      }
+
+      profilesTableBody.innerHTML = "";
+      currentProfiles.forEach((profile) => {
+        const isActive = currentProfileRun && currentProfileRun.profile_id === profile.id;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${profile.name}<div class="subtle">${profile.description || "no description"}</div></td>
+          <td>${profile.cone || "--"}</td>
+          <td>${profile.segments.length}</td>
+          <td>${formatDuration(profile.total_duration_seconds || 0)}</td>
+          <td>
+            <div class="profile-list-actions">
+              <button type="button" data-profile-activate="${profile.id}">${isActive ? "Restart Tracking" : "Track"}</button>
+              <button type="button" data-profile-edit="${profile.id}">Edit</button>
+              <button type="button" data-profile-delete="${profile.id}">Delete</button>
+            </div>
+          </td>
+        `;
+        profilesTableBody.appendChild(row);
+      });
+
+      profilesTableBody.querySelectorAll("[data-profile-activate]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          profileStatusMessage.textContent = "Starting profile tracking...";
+          const response = await fetch(`/api/profiles/${button.dataset.profileActivate}/activate`, { method: "POST" });
+          const payload = await response.json();
+          if (!response.ok) {
+            profileStatusMessage.textContent = payload.error || "Failed to start profile tracking.";
+            return;
+          }
+          profileStatusMessage.textContent = payload.message || "Profile tracking started.";
+          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+        });
+      });
+
+      profilesTableBody.querySelectorAll("[data-profile-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const profile = currentProfiles.find((item) => item.id === Number(button.dataset.profileEdit));
+          if (!profile) {
+            return;
+          }
+          editingProfileId = profile.id;
+          document.getElementById("profileName").value = profile.name;
+          document.getElementById("profileCone").value = profile.cone || "";
+          document.getElementById("profileDescription").value = profile.description || "";
+          editingProfileSegments = (profile.segments || []).map((segment) => ({
+            name: segment.name,
+            target_temp_c: Number(segment.target_temp_c),
+            ramp_rate_c_per_hour: Number(segment.ramp_rate_c_per_hour),
+            soak_minutes: Number(segment.soak_minutes),
+          }));
+          profileSubmit.textContent = "Save Profile";
+          profileError.textContent = "";
+          renderProfileSegmentsEditor();
+        });
+      });
+
+      profilesTableBody.querySelectorAll("[data-profile-delete]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const response = await fetch(`/api/profiles/${button.dataset.profileDelete}/delete`, { method: "POST" });
+          const payload = await response.json();
+          if (!response.ok) {
+            profileStatusMessage.textContent = payload.error || "Failed to delete profile.";
+            return;
+          }
+          if (editingProfileId === Number(button.dataset.profileDelete)) {
+            resetProfileForm();
+          }
+          profileStatusMessage.textContent = "Profile deleted.";
+          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+        });
+      });
     }
 
     async function refreshAlertRules() {
@@ -1900,14 +2307,15 @@ PAGE_HTML = """<!doctype html>
       const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
       const response = await fetch(`/api/history?${params.toString()}`);
       const payload = await response.json();
-      drawChart(payload.samples);
+      drawChart(payload.samples, payload.profile_overlay || []);
       if (payload.meta) {
         const resolutionLabel = payload.meta.bucket_seconds >= 3600
           ? `${Math.round(payload.meta.bucket_seconds / 3600)}h`
           : payload.meta.bucket_seconds >= 60
             ? `${Math.round(payload.meta.bucket_seconds / 60)}m`
             : `${payload.meta.bucket_seconds}s`;
-        chartMeta.textContent = `${payload.meta.returned_samples} plotted from ${payload.meta.raw_rows} raw rows at ${resolutionLabel} buckets`;
+        const overlayLabel = (payload.profile_overlay || []).length ? ", profile overlay on" : "";
+        chartMeta.textContent = `${payload.meta.returned_samples} plotted from ${payload.meta.raw_rows} raw rows at ${resolutionLabel} buckets${overlayLabel}`;
       }
     }
 
@@ -1916,6 +2324,7 @@ PAGE_HTML = """<!doctype html>
         await Promise.all([
           refreshStatus(),
           refreshHistory(),
+          refreshProfiles(),
           refreshAlertRules(),
           refreshAlertDeliveries(),
           refreshAlertChannels(),
@@ -1941,7 +2350,7 @@ PAGE_HTML = """<!doctype html>
       smoothingEnabled = !smoothingEnabled;
       event.target.classList.toggle("active", smoothingEnabled);
       event.target.textContent = smoothingEnabled ? "Smooth" : "Raw";
-      drawChart(chartState.points);
+      drawChart(chartState.points, chartState.overlayPoints || []);
     });
 
     resolutionSelect.addEventListener("change", async () => {
@@ -2080,20 +2489,69 @@ PAGE_HTML = """<!doctype html>
       resetRuleForm();
     });
 
+    profileForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      profileError.textContent = "";
+      const payload = gatherProfilePayload();
+      const path = editingProfileId === null
+        ? "/api/profiles"
+        : `/api/profiles/${editingProfileId}`;
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        profileError.textContent = result.error || "Failed to save profile.";
+        return;
+      }
+      profileStatusMessage.textContent = editingProfileId === null ? "Profile created." : "Profile updated.";
+      resetProfileForm();
+      await refreshProfiles();
+    });
+
+    profileCancel.addEventListener("click", () => {
+      resetProfileForm();
+    });
+
+    addSegmentButton.addEventListener("click", () => {
+      editingProfileSegments.push(emptyProfileSegment());
+      renderProfileSegmentsEditor();
+    });
+
+    profileStopButton.addEventListener("click", async () => {
+      const response = await fetch("/api/profiles/stop", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) {
+        profileStatusMessage.textContent = payload.error || "Failed to stop profile tracking.";
+        return;
+      }
+      profileStatusMessage.textContent = payload.message || "Profile tracking stopped.";
+      await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+    });
+
+    profileRefreshButton.addEventListener("click", async () => {
+      profileStatusMessage.textContent = "Reloading profiles...";
+      await refreshProfiles();
+      profileStatusMessage.textContent = "Profiles reloaded.";
+    });
+
     canvas.addEventListener("mousemove", (event) => {
       hoverX = event.clientX - canvas.getBoundingClientRect().left;
-      drawChart(chartState.points);
+      drawChart(chartState.points, chartState.overlayPoints || []);
     });
 
     canvas.addEventListener("mouseleave", () => {
       hoverX = null;
-      drawChart(chartState.points);
+      drawChart(chartState.points, chartState.overlayPoints || []);
     });
 
     setupCardDragAndDrop();
     populateResolutionOptions();
     window.addEventListener("resize", refreshHistory);
     resetRuleForm();
+    resetProfileForm();
     setActiveAlertTab("rules");
     setSetupModalOpen(false);
     setLayoutEditEnabled(false);
@@ -2198,6 +2656,19 @@ def open_readwrite_connection() -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS firing_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            cone TEXT NOT NULL DEFAULT '',
+            segments_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
     connection.commit()
     return connection
 
@@ -2231,6 +2702,7 @@ def fetch_dashboard_status() -> dict:
             "latest_fault": None,
             "latest_alert": None,
             "active_alert_rule": None,
+            "active_profile_run": None,
         }
 
     try:
@@ -2269,6 +2741,7 @@ def fetch_dashboard_status() -> dict:
                 """
             , (alert_acknowledged_at, alert_acknowledged_at)).fetchone()
         active_alert_rule = None
+        active_profile_run = fetch_active_profile_run(connection)
         if table_exists(connection, "alert_rules"):
             select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, notify_cooldown_minutes, active, last_triggered_at"
             if table_has_column(connection, "alert_rules", "color_hex"):
@@ -2303,6 +2776,7 @@ def fetch_dashboard_status() -> dict:
         "latest_fault": row_to_payload(latest_fault),
         "latest_alert": row_to_payload(latest_alert),
         "active_alert_rule": active_alert_rule,
+        "active_profile_run": active_profile_run,
     }
 
 
@@ -2487,6 +2961,275 @@ def update_watchdog_settings(payload: dict) -> dict:
     return {"ok": True, "settings": normalized}
 
 
+def parse_profile_row(row: sqlite3.Row) -> FiringProfile:
+    segments_data = json.loads(row["segments_json"])
+    if not isinstance(segments_data, list):
+        raise ValueError("profile segments must be a list")
+
+    segments = [
+        ProfileSegment(
+            name=str(segment.get("name", "")).strip(),
+            target_temp_c=float(segment.get("target_temp_c")),
+            ramp_rate_c_per_hour=float(segment.get("ramp_rate_c_per_hour")),
+            soak_minutes=float(segment.get("soak_minutes", 0.0)),
+        )
+        for segment in segments_data
+    ]
+    profile = FiringProfile(
+        id=row["id"],
+        name=row["name"],
+        description=row["description"],
+        cone=row["cone"],
+        segments=segments,
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+    validate_profile(profile)
+    return profile
+
+
+def parse_profile_payload(payload: dict) -> FiringProfile:
+    segments_payload = payload.get("segments")
+    if not isinstance(segments_payload, list):
+        raise ValueError("segments must be a list")
+
+    profile = FiringProfile(
+        id=None,
+        name=str(payload.get("name", "")).strip(),
+        description=str(payload.get("description", "")).strip(),
+        cone=str(payload.get("cone", "")).strip(),
+        segments=[
+            ProfileSegment(
+                name=str(segment.get("name", "")).strip(),
+                target_temp_c=float(segment.get("target_temp_c")),
+                ramp_rate_c_per_hour=float(segment.get("ramp_rate_c_per_hour")),
+                soak_minutes=float(segment.get("soak_minutes", 0.0)),
+            )
+            for segment in segments_payload
+        ],
+    )
+    validate_profile(profile)
+    return profile
+
+
+def fetch_profile_by_id(connection: sqlite3.Connection, profile_id: int) -> FiringProfile | None:
+    row = connection.execute(
+        """
+        SELECT id, name, description, cone, segments_json, created_at, updated_at
+        FROM firing_profiles
+        WHERE id = ?
+        """,
+        (profile_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return parse_profile_row(row)
+
+
+def fetch_active_profile_run(connection: sqlite3.Connection) -> dict | None:
+    if not table_exists(connection, "dashboard_state") or not table_exists(connection, "firing_profiles"):
+        return None
+
+    active_run_json = get_dashboard_state_value(connection, "active_profile_run")
+    if not active_run_json:
+        return None
+
+    try:
+        active_run = json.loads(active_run_json)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(active_run, dict):
+        return None
+
+    profile_id = active_run.get("profile_id")
+    started_at_text = active_run.get("started_at")
+    start_temp_c = active_run.get("start_temp_c")
+    if not isinstance(profile_id, int) or not started_at_text:
+        return None
+
+    profile = fetch_profile_by_id(connection, profile_id)
+    if profile is None:
+        return None
+
+    started_at = datetime.fromisoformat(started_at_text)
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    start_temp_c = float(start_temp_c) if start_temp_c is not None else profile.segments[0].target_temp_c
+    state = expected_profile_state(profile, started_at, start_temp_c, datetime.now(timezone.utc))
+    payload = profile_to_payload(profile)
+    payload.update(
+        {
+            "profile_id": profile.id,
+            "started_at": started_at.isoformat(),
+            "start_temp_c": start_temp_c,
+            "start_temp_f": (start_temp_c * 9.0 / 5.0) + 32.0,
+            "phase": state["phase"],
+            "segment_index": state["segment_index"],
+            "segment_name": state["segment_name"],
+            "expected_temp_c": state["expected_temp_c"],
+            "expected_temp_f": state["expected_temp_f"],
+            "elapsed_seconds": state["elapsed_seconds"],
+            "complete": state["complete"],
+        }
+    )
+    return payload
+
+
+def fetch_profiles() -> dict:
+    connection = open_readwrite_connection()
+    try:
+        rows = connection.execute(
+            """
+            SELECT id, name, description, cone, segments_json, created_at, updated_at
+            FROM firing_profiles
+            ORDER BY name COLLATE NOCASE ASC, id ASC
+            """
+        ).fetchall()
+        profiles = [profile_to_payload(parse_profile_row(row)) for row in rows]
+        active_run = fetch_active_profile_run(connection)
+    finally:
+        connection.close()
+
+    return {
+        "profiles": profiles,
+        "active_run": active_run,
+    }
+
+
+def create_profile(payload: dict) -> dict:
+    profile = parse_profile_payload(payload)
+    now = datetime.now(timezone.utc).isoformat()
+    connection = open_readwrite_connection()
+    try:
+        connection.execute(
+            """
+            INSERT INTO firing_profiles (
+                name,
+                description,
+                cone,
+                segments_json,
+                created_at,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile.name,
+                profile.description,
+                profile.cone,
+                json.dumps([segment_to_dict(segment) for segment in profile.segments]),
+                now,
+                now,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
+def update_profile(profile_id: int, payload: dict) -> dict:
+    profile = parse_profile_payload(payload)
+    connection = open_readwrite_connection()
+    try:
+        existing = fetch_profile_by_id(connection, profile_id)
+        if existing is None:
+            raise ValueError("profile not found")
+        connection.execute(
+            """
+            UPDATE firing_profiles
+            SET name = ?, description = ?, cone = ?, segments_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                profile.name,
+                profile.description,
+                profile.cone,
+                json.dumps([segment_to_dict(segment) for segment in profile.segments]),
+                datetime.now(timezone.utc).isoformat(),
+                profile_id,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
+def delete_profile(profile_id: int) -> dict:
+    connection = open_readwrite_connection()
+    try:
+        connection.execute("DELETE FROM firing_profiles WHERE id = ?", (profile_id,))
+        active_run = get_dashboard_state_value(connection, "active_profile_run")
+        if active_run:
+            try:
+                active_payload = json.loads(active_run)
+            except json.JSONDecodeError:
+                active_payload = None
+            if isinstance(active_payload, dict) and active_payload.get("profile_id") == profile_id:
+                connection.execute("DELETE FROM dashboard_state WHERE key = 'active_profile_run'")
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
+def activate_profile(profile_id: int) -> dict:
+    connection = open_readwrite_connection()
+    try:
+        profile = fetch_profile_by_id(connection, profile_id)
+        if profile is None:
+            raise ValueError("profile not found")
+
+        latest_good_sample = None
+        if table_exists(connection, "temperature_log"):
+            latest_good_sample = connection.execute(
+                """
+                SELECT temp_c
+                FROM temperature_log
+                WHERE status = 'OK' AND temp_c IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+
+        start_temp_c = (
+            float(latest_good_sample["temp_c"])
+            if latest_good_sample is not None
+            else profile.segments[0].target_temp_c
+        )
+        run_payload = {
+            "profile_id": profile_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "start_temp_c": start_temp_c,
+        }
+        set_dashboard_state_value(connection, "active_profile_run", json.dumps(run_payload))
+        connection.commit()
+    finally:
+        connection.close()
+
+    return {"ok": True, "message": f"Tracking started for {profile.name}."}
+
+
+def stop_profile_tracking() -> dict:
+    connection = open_readwrite_connection()
+    try:
+        connection.execute("DELETE FROM dashboard_state WHERE key = 'active_profile_run'")
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True, "message": "Profile tracking stopped."}
+
+
+def segment_to_dict(segment: ProfileSegment) -> dict:
+    return {
+        "name": segment.name,
+        "target_temp_c": segment.target_temp_c,
+        "ramp_rate_c_per_hour": segment.ramp_rate_c_per_hour,
+        "soak_minutes": segment.soak_minutes,
+    }
+
+
 def fetch_history(window_name: str) -> dict:
     if window_name not in HISTORY_WINDOWS:
         window_name = "24h"
@@ -2495,7 +3238,9 @@ def fetch_history(window_name: str) -> dict:
     if connection is None:
         return {"range": window_name, "samples": [], "meta": None}
 
-    cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
+    window_end_dt = datetime.now(timezone.utc)
+    window_start_dt = window_end_dt - HISTORY_WINDOWS[window_name]
+    cutoff = window_start_dt.isoformat()
     bucket_seconds = HISTORY_BUCKET_PRESETS[window_name]["auto_bucket_seconds"]
     raw_rows = 0
     try:
@@ -2534,12 +3279,42 @@ def fetch_history(window_name: str) -> dict:
             """,
             (cutoff, bucket_seconds),
         ).fetchall()
+        active_run = fetch_active_profile_run(connection)
     finally:
         connection.close()
+
+    profile_overlay = []
+    if active_run:
+        profile = FiringProfile(
+            id=active_run["id"],
+            name=active_run["name"],
+            description=active_run["description"],
+            cone=active_run["cone"],
+            segments=[
+                ProfileSegment(
+                    name=segment["name"],
+                    target_temp_c=float(segment["target_temp_c"]),
+                    ramp_rate_c_per_hour=float(segment["ramp_rate_c_per_hour"]),
+                    soak_minutes=float(segment["soak_minutes"]),
+                )
+                for segment in active_run["segments"]
+            ],
+            created_at=active_run.get("created_at"),
+            updated_at=active_run.get("updated_at"),
+        )
+        profile_overlay = generate_profile_overlay(
+            profile,
+            datetime.fromisoformat(active_run["started_at"]),
+            float(active_run["start_temp_c"]),
+            window_start_dt,
+            window_end_dt,
+            bucket_seconds,
+        )
 
     return {
         "range": window_name,
         "samples": [row_to_payload(row) for row in rows],
+        "profile_overlay": profile_overlay,
         "meta": {
             "bucket_seconds": bucket_seconds,
             "returned_samples": len(rows),
@@ -2567,7 +3342,9 @@ def fetch_history_with_resolution(window_name: str, resolution_name: str) -> dic
     if connection is None:
         return {"range": window_name, "samples": [], "meta": None}
 
-    cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
+    window_end_dt = datetime.now(timezone.utc)
+    window_start_dt = window_end_dt - HISTORY_WINDOWS[window_name]
+    cutoff = window_start_dt.isoformat()
     try:
         raw_rows = connection.execute(
             """
@@ -2604,12 +3381,42 @@ def fetch_history_with_resolution(window_name: str, resolution_name: str) -> dic
             """,
             (cutoff, bucket_seconds),
         ).fetchall()
+        active_run = fetch_active_profile_run(connection)
     finally:
         connection.close()
+
+    profile_overlay = []
+    if active_run:
+        profile = FiringProfile(
+            id=active_run["id"],
+            name=active_run["name"],
+            description=active_run["description"],
+            cone=active_run["cone"],
+            segments=[
+                ProfileSegment(
+                    name=segment["name"],
+                    target_temp_c=float(segment["target_temp_c"]),
+                    ramp_rate_c_per_hour=float(segment["ramp_rate_c_per_hour"]),
+                    soak_minutes=float(segment["soak_minutes"]),
+                )
+                for segment in active_run["segments"]
+            ],
+            created_at=active_run.get("created_at"),
+            updated_at=active_run.get("updated_at"),
+        )
+        profile_overlay = generate_profile_overlay(
+            profile,
+            datetime.fromisoformat(active_run["started_at"]),
+            float(active_run["start_temp_c"]),
+            window_start_dt,
+            window_end_dt,
+            bucket_seconds,
+        )
 
     return {
         "range": window_name,
         "samples": [row_to_payload(row) for row in rows],
+        "profile_overlay": profile_overlay,
         "meta": {
             "bucket_seconds": bucket_seconds,
             "returned_samples": len(rows),
@@ -3039,6 +3846,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(fetch_watchdog_settings())
             return
 
+        if parsed_path.path == "/api/profiles":
+            self.send_json_response(fetch_profiles())
+            return
+
         if parsed_path.path == "/api/dashboard-preferences":
             self.send_json_response(fetch_dashboard_preferences())
             return
@@ -3073,6 +3884,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(update_watchdog_settings(payload))
                 return
 
+            if parsed_path.path == "/api/profiles":
+                self.send_json_response(create_profile(payload))
+                return
+
+            if parsed_path.path == "/api/profiles/stop":
+                self.send_json_response(stop_profile_tracking())
+                return
+
             if parsed_path.path == "/api/reset-faults":
                 self.send_json_response(reset_faults())
                 return
@@ -3090,9 +3909,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(delete_alert_rule(rule_id))
                 return
 
+            if parsed_path.path.startswith("/api/profiles/") and parsed_path.path.endswith("/delete"):
+                profile_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(delete_profile(profile_id))
+                return
+
+            if parsed_path.path.startswith("/api/profiles/") and parsed_path.path.endswith("/activate"):
+                profile_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(activate_profile(profile_id))
+                return
+
             if parsed_path.path.startswith("/api/alert-rules/"):
                 rule_id = int(parsed_path.path.split("/")[3])
                 self.send_json_response(update_alert_rule(rule_id, payload))
+                return
+
+            if parsed_path.path.startswith("/api/profiles/"):
+                profile_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(update_profile(profile_id, payload))
                 return
         except ValueError as exc:
             self.send_json_response({"error": str(exc)}, status=400)

@@ -189,6 +189,7 @@ Dashboard features:
 - Shared dashboard preferences stored in SQLite so layout and theme follow across devices
 - Reset buttons to acknowledge current faults and clear active alerts back to normal
 - Range-aware chart downsampling with configurable resolution choices in the UI
+- Firing profile setup and tracking with expected-temperature chart overlays
 
 Default chart sampling behavior:
 
@@ -197,6 +198,27 @@ Default chart sampling behavior:
 - `7d` uses `30m` buckets by default
 
 The dashboard does not delete source rows from SQLite when downsampling. It only changes how many points are plotted for readability.
+
+## Profiles
+
+The dashboard can also store firing profiles for monitoring and planning.
+
+Each profile includes:
+
+- a profile name
+- optional cone and description
+- one or more segments with:
+  - target temperature in Celsius
+  - ramp rate in Celsius per hour
+  - soak time in minutes
+
+Profiles do not control the kiln in this release. They are used to:
+
+- track an active planned firing
+- show the current expected segment and expected temperature
+- overlay the planned curve on the temperature chart
+
+Starting or restarting profile tracking captures the current latest good kiln temperature as the profile start temperature when available.
 
 ## Alerts
 
