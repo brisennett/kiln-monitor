@@ -71,7 +71,7 @@ PAGE_HTML = """<!doctype html>
       min-height: 100vh;
     }
     main {
-      max-width: 1100px;
+      max-width: 1400px;
       margin: 0 auto;
     }
     h1 {
@@ -108,24 +108,11 @@ PAGE_HTML = """<!doctype html>
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       margin-bottom: 20px;
     }
-    .layout-shell {
-      display: grid;
-      grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
-      gap: 18px;
-      align-items: start;
-    }
     .main-column {
       display: flex;
       flex-direction: column;
       gap: 18px;
       min-width: 0;
-    }
-    .sidebar-column {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-      min-width: 0;
-      align-self: start;
     }
     .layout-zone {
       display: grid;
@@ -551,9 +538,6 @@ PAGE_HTML = """<!doctype html>
       body {
         padding: 14px;
       }
-      .layout-shell {
-        grid-template-columns: 1fr;
-      }
       .toolbar {
         padding: 14px;
       }
@@ -620,8 +604,7 @@ PAGE_HTML = """<!doctype html>
       </section>
     </div>
 
-    <div class="layout-shell">
-      <div class="main-column">
+    <div class="main-column">
         <section>
           <div class="zone-label">Top Summary</div>
           <div class="layout-zone layout-zone-cards" id="topSummaryZone" data-zone-id="top-summary"></div>
@@ -650,13 +633,6 @@ PAGE_HTML = """<!doctype html>
         <section>
           <div class="zone-label">Below Chart</div>
           <div class="layout-zone layout-zone-cards" id="belowChartZone" data-zone-id="below-chart"></div>
-        </section>
-      </div>
-
-      <aside class="sidebar-column">
-        <section>
-          <div class="zone-label">Sidebar</div>
-          <div class="layout-zone layout-zone-cards" id="sidebarZone" data-zone-id="sidebar"></div>
         </section>
 
         <section class="rules-panel">
@@ -1041,7 +1017,6 @@ PAGE_HTML = """<!doctype html>
             </table>
           </div>
         </section>
-      </aside>
     </div>
 
     <div id="cardTemplates" hidden>
@@ -1141,8 +1116,7 @@ PAGE_HTML = """<!doctype html>
     const activeProfileElapsed = document.getElementById("activeProfileElapsed");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
-    const sidebarZone = document.getElementById("sidebarZone");
-    const layoutZones = [topSummaryZone, belowChartZone, sidebarZone];
+    const layoutZones = [topSummaryZone, belowChartZone];
     const canvas = document.getElementById("tempChart");
     const ctx = canvas.getContext("2d");
     const resolutionSelect = document.getElementById("resolutionSelect");
@@ -1569,9 +1543,35 @@ PAGE_HTML = """<!doctype html>
     function defaultCardLayout() {
       return {
         "top-summary": ["latest-temp", "last-update", "sample-age", "total-rows"],
-        "below-chart": ["last-fault"],
-        "sidebar": ["last-alert", "active-profile"],
+        "below-chart": ["last-fault", "last-alert", "active-profile"],
       };
+    }
+
+    function normalizeCardLayout(layout) {
+      const normalized = defaultCardLayout();
+      if (!layout || typeof layout !== "object" || Array.isArray(layout)) {
+        return normalized;
+      }
+
+      const topSummary = Array.isArray(layout["top-summary"]) ? layout["top-summary"] : [];
+      const belowChart = Array.isArray(layout["below-chart"]) ? layout["below-chart"] : [];
+      const legacySidebar = Array.isArray(layout["sidebar"]) ? layout["sidebar"] : [];
+
+      normalized["top-summary"] = [...topSummary];
+      normalized["below-chart"] = [...belowChart, ...legacySidebar];
+
+      const seen = new Set();
+      Object.keys(normalized).forEach((zoneId) => {
+        normalized[zoneId] = normalized[zoneId].filter((cardId) => {
+          if (seen.has(cardId)) {
+            return false;
+          }
+          seen.add(cardId);
+          return true;
+        });
+      });
+
+      return normalized;
     }
 
     function getAllCards() {
@@ -1579,13 +1579,13 @@ PAGE_HTML = """<!doctype html>
     }
 
     function applyCardLayout(layout) {
-      const normalizedLayout = layout || defaultCardLayout();
+      const normalizedLayout = normalizeCardLayout(layout);
       const cards = getAllCards();
       const cardById = new Map(cards.map((card) => [card.dataset.cardId, card]));
       layoutZones.forEach((zone) => {
         zone.innerHTML = "";
       });
-      ["top-summary", "below-chart", "sidebar"].forEach((zoneId) => {
+      ["top-summary", "below-chart"].forEach((zoneId) => {
         const zone = layoutZones.find((item) => item.dataset.zoneId === zoneId);
         const cardIds = normalizedLayout[zoneId] || [];
         cardIds.forEach((cardId) => {
