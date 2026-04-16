@@ -190,6 +190,7 @@ Dashboard features:
 - Reset buttons to acknowledge current faults and clear active alerts back to normal
 - Range-aware chart downsampling with configurable resolution choices in the UI
 - Firing profile setup and tracking with expected-temperature chart overlays
+- Manual camera snapshots with latest-image preview in the dashboard
 
 Default chart sampling behavior:
 
@@ -219,6 +220,31 @@ Profiles do not control the kiln in this release. They are used to:
 - overlay the planned curve on the temperature chart
 
 Starting or restarting profile tracking captures the current latest good kiln temperature as the profile start temperature when available.
+
+## Camera
+
+The dashboard can trigger a manual still capture using `rpicam-still` and show the latest snapshot.
+
+Defaults:
+
+```bash
+export KILN_MONITOR_CAMERA_WIDTH=1280
+export KILN_MONITOR_CAMERA_HEIGHT=960
+export KILN_MONITOR_CAMERA_ROTATION=0
+export KILN_MONITOR_CAMERA_CAPTURE_TIMEOUT_SECONDS=15
+```
+
+Snapshots are stored under:
+
+```bash
+data/snapshots/
+```
+
+The dashboard serves the latest image from:
+
+```text
+/camera/latest.jpg
+```
 
 ## Alerts
 

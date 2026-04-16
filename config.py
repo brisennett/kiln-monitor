@@ -12,6 +12,11 @@ ARCHIVE_DIR = Path(os.getenv("KILN_MONITOR_ARCHIVE_DIR", DATA_DIR / "archive"))
 LOG_DIR = BASE_DIR / "logs"
 DATABASE_PATH = Path(os.getenv("KILN_MONITOR_DB_PATH", DATA_DIR / "kiln_monitor.db"))
 APP_LOG_PATH = Path(os.getenv("KILN_MONITOR_LOG_PATH", LOG_DIR / "kiln_monitor.log"))
+CAMERA_SNAPSHOTS_DIR = Path(os.getenv("KILN_MONITOR_CAMERA_SNAPSHOTS_DIR", DATA_DIR / "snapshots"))
+CAMERA_WIDTH = int(os.getenv("KILN_MONITOR_CAMERA_WIDTH", "1280"))
+CAMERA_HEIGHT = int(os.getenv("KILN_MONITOR_CAMERA_HEIGHT", "960"))
+CAMERA_ROTATION = int(os.getenv("KILN_MONITOR_CAMERA_ROTATION", "0"))
+CAMERA_CAPTURE_TIMEOUT_SECONDS = float(os.getenv("KILN_MONITOR_CAMERA_CAPTURE_TIMEOUT_SECONDS", "15"))
 
 # Sensor polling cadence. A 2-second default is responsive enough for a kiln
 # while keeping storage growth and sensor bus traffic modest.

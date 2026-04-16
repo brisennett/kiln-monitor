@@ -8,7 +8,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from alerts import AlertEvent, AlertRule, validate_rule
-from config import DATABASE_PATH, WATCHDOG_FAULT_STREAK_THRESHOLD, WATCHDOG_NOTIFY_COOLDOWN_MINUTES, WATCHDOG_STALE_DATA_SECONDS
+from camera import CameraError, capture_snapshot, latest_snapshot_info
+from config import (
+    CAMERA_SNAPSHOTS_DIR,
+    DATABASE_PATH,
+    WATCHDOG_FAULT_STREAK_THRESHOLD,
+    WATCHDOG_NOTIFY_COOLDOWN_MINUTES,
+    WATCHDOG_STALE_DATA_SECONDS,
+)
 from notifiers import NotificationError, build_enabled_notifiers, default_alert_channel_settings, load_alert_channel_settings
 from profiles import (
     FiringProfile,
@@ -455,6 +462,56 @@ PAGE_HTML = """<!doctype html>
       color: #9ca3af;
       padding: 12px 0;
     }
+    .camera-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .camera-shell {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .camera-preview {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: #020617;
+    }
+    .camera-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 240px;
+      border-radius: 14px;
+      border: 1px dashed #334155;
+      color: #94a3b8;
+      background: rgba(2, 6, 23, 0.55);
+      text-align: center;
+      padding: 16px;
+    }
+    .camera-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .camera-meta-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .camera-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
     label {
       display: block;
       color: #9ca3af;
@@ -547,6 +604,9 @@ PAGE_HTML = """<!doctype html>
       }
       canvas {
         height: 320px;
+      }
+      .camera-shell {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -1017,7 +1077,42 @@ PAGE_HTML = """<!doctype html>
             </table>
           </div>
         </section>
-    </div>
+
+        <section class="camera-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Camera</div>
+              <div class="subtle">Take a still snapshot from the kiln area and keep the latest image visible in the dashboard.</div>
+            </div>
+          </div>
+
+          <div class="camera-shell">
+            <div id="cameraPreviewWrap">
+              <div id="cameraEmptyState" class="camera-empty">No snapshot captured yet.</div>
+              <img id="cameraPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
+            </div>
+
+            <div>
+              <div class="camera-meta">
+                <div class="camera-meta-card">
+                  <div class="label">Latest Capture</div>
+                  <div class="value" id="cameraCapturedAt">--</div>
+                </div>
+                <div class="camera-meta-card">
+                  <div class="label">Image</div>
+                  <div class="value" id="cameraImageStatus">No image yet</div>
+                </div>
+              </div>
+
+              <div class="camera-actions">
+                <button type="button" id="captureSnapshotButton">Capture Snapshot</button>
+                <button type="button" id="refreshSnapshotButton">Refresh Camera</button>
+              </div>
+              <div id="cameraStatusMessage" class="success-text"></div>
+            </div>
+          </div>
+        </section>
+      </div>
 
     <div id="cardTemplates" hidden>
       <div class="card" data-card-id="latest-temp">
@@ -1114,6 +1209,13 @@ PAGE_HTML = """<!doctype html>
     const activeProfileSegment = document.getElementById("activeProfileSegment");
     const activeProfileExpectedTemp = document.getElementById("activeProfileExpectedTemp");
     const activeProfileElapsed = document.getElementById("activeProfileElapsed");
+    const cameraPreview = document.getElementById("cameraPreview");
+    const cameraEmptyState = document.getElementById("cameraEmptyState");
+    const cameraCapturedAt = document.getElementById("cameraCapturedAt");
+    const cameraImageStatus = document.getElementById("cameraImageStatus");
+    const cameraStatusMessage = document.getElementById("cameraStatusMessage");
+    const captureSnapshotButton = document.getElementById("captureSnapshotButton");
+    const refreshSnapshotButton = document.getElementById("refreshSnapshotButton");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const layoutZones = [topSummaryZone, belowChartZone];
@@ -1151,6 +1253,7 @@ PAGE_HTML = """<!doctype html>
     let currentProfileRun = null;
     let editingProfileId = null;
     let editingProfileSegments = [];
+    let currentCameraStatus = null;
     let chartState = {
       points: [],
       plotPoints: [],
@@ -2133,6 +2236,47 @@ PAGE_HTML = """<!doctype html>
       });
     }
 
+    function renderCameraStatus(payload) {
+      currentCameraStatus = payload || {};
+      if (!payload || !payload.available || !payload.latest_url) {
+        cameraPreview.hidden = true;
+        cameraPreview.removeAttribute("src");
+        cameraEmptyState.hidden = false;
+        cameraCapturedAt.textContent = "--";
+        cameraImageStatus.textContent = payload?.error || "No image yet";
+        return;
+      }
+
+      cameraPreview.src = payload.latest_url;
+      cameraPreview.hidden = false;
+      cameraEmptyState.hidden = true;
+      cameraCapturedAt.textContent = formatTimestamp(payload.captured_at);
+      cameraImageStatus.textContent = payload.archived_filename || "latest.jpg";
+    }
+
+    async function refreshCameraStatus() {
+      const response = await fetch("/api/camera/status");
+      const payload = await response.json();
+      renderCameraStatus(payload);
+    }
+
+    async function captureSnapshot() {
+      cameraStatusMessage.textContent = "Capturing snapshot...";
+      captureSnapshotButton.disabled = true;
+      try {
+        const response = await fetch("/api/camera/capture", { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok) {
+          cameraStatusMessage.textContent = payload.error || "Failed to capture snapshot.";
+          return;
+        }
+        cameraStatusMessage.textContent = payload.message || "Snapshot captured.";
+        renderCameraStatus(payload.camera || null);
+      } finally {
+        captureSnapshotButton.disabled = false;
+      }
+    }
+
     async function refreshAlertRules() {
       const response = await fetch("/api/alert-rules");
       const payload = await response.json();
@@ -2325,6 +2469,7 @@ PAGE_HTML = """<!doctype html>
           refreshStatus(),
           refreshHistory(),
           refreshProfiles(),
+          refreshCameraStatus(),
           refreshAlertRules(),
           refreshAlertDeliveries(),
           refreshAlertChannels(),
@@ -2535,6 +2680,16 @@ PAGE_HTML = """<!doctype html>
       profileStatusMessage.textContent = "Reloading profiles...";
       await refreshProfiles();
       profileStatusMessage.textContent = "Profiles reloaded.";
+    });
+
+    captureSnapshotButton.addEventListener("click", async () => {
+      await captureSnapshot();
+    });
+
+    refreshSnapshotButton.addEventListener("click", async () => {
+      cameraStatusMessage.textContent = "Refreshing camera status...";
+      await refreshCameraStatus();
+      cameraStatusMessage.textContent = "Camera status refreshed.";
     });
 
     canvas.addEventListener("mousemove", (event) => {
@@ -3094,6 +3249,31 @@ def fetch_profiles() -> dict:
     return {
         "profiles": profiles,
         "active_run": active_run,
+    }
+
+
+def fetch_camera_status() -> dict:
+    try:
+        return latest_snapshot_info()
+    except CameraError as exc:
+        return {
+            "available": False,
+            "captured_at": None,
+            "latest_url": None,
+            "archived_filename": None,
+            "error": str(exc),
+        }
+
+
+def capture_camera_snapshot() -> dict:
+    result = capture_snapshot()
+    camera = latest_snapshot_info()
+    camera["captured_at"] = result.captured_at
+    camera["archived_filename"] = result.archived_filename
+    return {
+        "ok": True,
+        "message": "Snapshot captured.",
+        "camera": camera,
     }
 
 
@@ -3815,6 +3995,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_text_response(PAGE_HTML, content_type="text/html; charset=utf-8")
             return
 
+        if parsed_path.path == "/camera/latest.jpg":
+            latest_path = CAMERA_SNAPSHOTS_DIR / "latest.jpg"
+            if not latest_path.exists():
+                self.send_error(404, "No snapshot available")
+                return
+            try:
+                image_bytes = latest_path.read_bytes()
+            except OSError:
+                self.send_error(500, "Unable to read snapshot")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(image_bytes)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(image_bytes)
+            return
+
         if parsed_path.path == "/api/status":
             self.send_json_response(fetch_dashboard_status())
             return
@@ -3848,6 +4046,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/api/profiles":
             self.send_json_response(fetch_profiles())
+            return
+
+        if parsed_path.path == "/api/camera/status":
+            self.send_json_response(fetch_camera_status())
             return
 
         if parsed_path.path == "/api/dashboard-preferences":
@@ -3886,6 +4088,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             if parsed_path.path == "/api/profiles":
                 self.send_json_response(create_profile(payload))
+                return
+
+            if parsed_path.path == "/api/camera/capture":
+                self.send_json_response(capture_camera_snapshot())
                 return
 
             if parsed_path.path == "/api/profiles/stop":
@@ -3930,6 +4136,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 return
         except ValueError as exc:
             self.send_json_response({"error": str(exc)}, status=400)
+            return
+        except CameraError as exc:
+            self.send_json_response({"error": str(exc)}, status=500)
             return
         except sqlite3.Error as exc:
             self.send_json_response({"error": f"Database error: {exc}"}, status=500)
