@@ -3844,7 +3844,7 @@ def create_alert_rule(payload: dict) -> dict:
                 notify_push,
                 active,
                 last_triggered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
             """,
             (
                 rule.name,
