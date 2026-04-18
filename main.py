@@ -7,8 +7,10 @@ import time
 from datetime import datetime, timezone
 
 from alerts import AlertEvent, AlertRule, evaluate_alert_rules
+from camera import CameraError, capture_snapshot
 from config import (
     APP_LOG_PATH,
+    ALERT_SNAPSHOTS_ENABLED,
     DATABASE_PATH,
     ERROR_STREAK_WARNING_THRESHOLD,
     load_watchdog_settings,
@@ -50,6 +52,30 @@ def persist_alerts(storage: SQLiteLogger, alerts, logger) -> None:
             storage.log_alert(alert)
         except Exception:
             logger.exception("failed to persist alert with level=%s kind=%s", alert.level, alert.kind)
+
+
+def should_capture_alert_snapshot(alert: AlertEvent) -> bool:
+    if not ALERT_SNAPSHOTS_ENABLED:
+        return False
+    if alert.kind == "TEST_ALERT":
+        return False
+    return not alert.kind.endswith("_CLEAR")
+
+
+def attach_alert_snapshots(alerts, logger) -> None:
+    for alert in alerts:
+        if not should_capture_alert_snapshot(alert):
+            continue
+        try:
+            result = capture_snapshot()
+            alert.snapshot_filename = result.archived_filename
+            logger.info(
+                "captured alert snapshot for %s: %s",
+                alert.kind,
+                result.archived_filename,
+            )
+        except CameraError as exc:
+            logger.warning("alert snapshot capture skipped for %s: %s", alert.kind, exc)
 
 
 def build_watchdog_rule(rule_id: int, name: str, cooldown_minutes: float) -> AlertRule:
@@ -346,6 +372,7 @@ def run() -> int:
                 )
                 alert_rules = storage.fetch_alert_rules()
                 alerts, updated_rules = evaluate_alert_rules(sample, alert_rules)
+                attach_alert_snapshots(alerts, logger)
                 persist_alerts(storage, alerts, logger)
                 for original_rule, updated_rule in zip(alert_rules, updated_rules):
                     if (

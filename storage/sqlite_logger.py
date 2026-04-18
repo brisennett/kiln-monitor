@@ -57,12 +57,14 @@ class SQLiteLogger:
                 temp_c REAL,
                 temp_f REAL,
                 rule_id INTEGER,
-                rule_name TEXT
+                rule_name TEXT,
+                snapshot_filename TEXT
             )
             """
         )
         self._ensure_column("alert_log", "rule_id", "INTEGER")
         self._ensure_column("alert_log", "rule_name", "TEXT")
+        self._ensure_column("alert_log", "snapshot_filename", "TEXT")
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS alert_delivery_log (
@@ -156,8 +158,9 @@ class SQLiteLogger:
                 temp_c,
                 temp_f,
                 rule_id,
-                rule_name
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                rule_name,
+                snapshot_filename
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 alert.timestamp_utc,
@@ -168,6 +171,7 @@ class SQLiteLogger:
                 alert.temp_f,
                 alert.rule_id,
                 alert.rule_name,
+                alert.snapshot_filename,
             ),
         )
         self._connection.commit()

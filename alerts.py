@@ -32,6 +32,7 @@ class AlertEvent:
     temp_f: float | None
     rule_id: int | None = None
     rule_name: str | None = None
+    snapshot_filename: str | None = None
 
 
 @dataclass

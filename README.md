@@ -246,6 +246,12 @@ The dashboard serves the latest image from:
 /camera/latest.jpg
 ```
 
+Trigger alerts can also capture and archive a local snapshot automatically. This is enabled by default and skips clear/test alerts.
+
+```bash
+export KILN_MONITOR_ALERT_SNAPSHOTS_ENABLED=true
+```
+
 ## Alerts
 
 Alert rules are configured in the dashboard UI and stored in SQLite.

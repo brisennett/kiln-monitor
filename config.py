@@ -17,6 +17,7 @@ CAMERA_WIDTH = int(os.getenv("KILN_MONITOR_CAMERA_WIDTH", "1280"))
 CAMERA_HEIGHT = int(os.getenv("KILN_MONITOR_CAMERA_HEIGHT", "960"))
 CAMERA_ROTATION = int(os.getenv("KILN_MONITOR_CAMERA_ROTATION", "0"))
 CAMERA_CAPTURE_TIMEOUT_SECONDS = float(os.getenv("KILN_MONITOR_CAMERA_CAPTURE_TIMEOUT_SECONDS", "15"))
+ALERT_SNAPSHOTS_ENABLED = os.getenv("KILN_MONITOR_ALERT_SNAPSHOTS_ENABLED", "true").lower() == "true"
 
 # Sensor polling cadence. A 2-second default is responsive enough for a kiln
 # while keeping storage growth and sensor bus traffic modest.
