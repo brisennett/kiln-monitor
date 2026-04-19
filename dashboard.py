@@ -51,7 +51,7 @@ HISTORY_BUCKET_PRESETS = {
     },
 }
 
-PAGE_HTML = """<!doctype html>
+DASHBOARD_PAGE_HTML = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -192,7 +192,7 @@ PAGE_HTML = """<!doctype html>
       gap: 8px;
       flex-wrap: wrap;
     }
-    button {
+    .nav-button, button {
       border: 1px solid #334155;
       background: #1f2937;
       color: #e5e7eb;
@@ -200,6 +200,9 @@ PAGE_HTML = """<!doctype html>
       padding: 8px 14px;
       cursor: pointer;
       font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
     }
     button.active {
       background: #2563eb;
@@ -759,6 +762,7 @@ PAGE_HTML = """<!doctype html>
   <main>
     <h1>Kiln Monitor</h1>
     <section class="toolbar">
+      <a href="/alerts" class="nav-button">Alerts</a>
       <button type="button" id="openSetupButton">Dashboard Setup</button>
       <button type="button" id="resetFaultsButton">Reset Faults</button>
       <button type="button" id="resetAlertsButton">Reset Alerts</button>
@@ -880,290 +884,6 @@ PAGE_HTML = """<!doctype html>
         <section>
           <div class="zone-label">Below Chart</div>
           <div class="layout-zone layout-zone-cards" id="belowChartZone" data-zone-id="below-chart"></div>
-        </section>
-
-        <section class="rules-panel">
-          <div class="chart-top">
-            <div>
-              <div class="label">Alerting</div>
-              <div class="subtle">Manage rules and check whether email, SMS, and push deliveries are succeeding.</div>
-            </div>
-          </div>
-
-          <div class="tab-strip" role="tablist" aria-label="Alerting tabs">
-            <button type="button" class="tab-button active" data-alert-tab="rules" role="tab" aria-selected="true">Rules</button>
-            <button type="button" class="tab-button" data-alert-tab="channels" role="tab" aria-selected="false">Channel Setup</button>
-            <button type="button" class="tab-button" data-alert-tab="watchdog" role="tab" aria-selected="false">Watchdog</button>
-            <button type="button" class="tab-button" data-alert-tab="log" role="tab" aria-selected="false">Message Log</button>
-          </div>
-
-          <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="rules">
-            <form id="ruleForm">
-              <div class="rules-grid">
-                <div>
-                  <label for="ruleName">Name</label>
-                  <input id="ruleName" name="name" placeholder="Cone 06 reached" required />
-                </div>
-                <div>
-                  <label for="ruleType">Type</label>
-                  <select id="ruleType" name="rule_type">
-                    <option value="TARGET_REACHED">Target Reached</option>
-                    <option value="ABOVE_HIGH">Above High</option>
-                    <option value="BELOW_LOW">Below Low</option>
-                    <option value="TIME_ELAPSED">Time Elapsed</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="ruleThreshold" id="ruleThresholdLabel">Threshold F</label>
-                  <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
-                </div>
-                <div>
-                  <label for="ruleSeverity">Severity</label>
-                  <select id="ruleSeverity" name="severity">
-                    <option value="INFO">Info</option>
-                    <option value="WARNING" selected>Warning</option>
-                    <option value="CRITICAL">Critical</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="ruleHysteresis" id="ruleHysteresisLabel">Reset Gap F</label>
-                  <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
-                </div>
-                <div>
-                  <label for="ruleCooldown">Cooldown Minutes</label>
-                  <input id="ruleCooldown" name="notify_cooldown_minutes" type="number" step="0.1" value="15" min="0" required />
-                </div>
-                <div>
-                  <label for="ruleEnabled">Enabled</label>
-                  <select id="ruleEnabled" name="enabled">
-                    <option value="true" selected>Enabled</option>
-                    <option value="false">Disabled</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="ruleColor">Accent Color</label>
-                  <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
-                </div>
-                <div>
-                  <label for="ruleNotifyEmail">Email</label>
-                  <select id="ruleNotifyEmail" name="notify_email">
-                    <option value="false" selected>Off</option>
-                    <option value="true">On</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="ruleNotifySms">SMS</label>
-                  <select id="ruleNotifySms" name="notify_sms">
-                    <option value="false" selected>Off</option>
-                    <option value="true">On</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="ruleNotifyPush">Push</label>
-                  <select id="ruleNotifyPush" name="notify_push">
-                    <option value="false" selected>Off</option>
-                    <option value="true">On</option>
-                  </select>
-                </div>
-              </div>
-              <div class="rule-actions">
-                <button type="submit" id="ruleSubmit">Add Rule</button>
-                <button type="button" id="ruleCancel">Cancel Edit</button>
-              </div>
-              <div id="ruleError" class="error-text"></div>
-            </form>
-
-            <div class="rules-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>Threshold</th>
-                    <th>Severity</th>
-                    <th>Status</th>
-                    <th>Last Triggered</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="rulesTableBody">
-                  <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section id="alertChannelsTab" class="tab-panel" data-alert-tab-panel="channels" hidden>
-            <div class="channel-toolbar">
-              <button type="button" id="saveChannelSettingsButton">Save Channel Settings</button>
-              <button type="button" id="resetChannelSettingsButton">Reload Saved Settings</button>
-            </div>
-            <div id="channelSettingsStatus" class="success-text"></div>
-
-            <hr class="panel-divider" />
-
-            <div class="channel-health" id="channelHealth">
-              <span class="pill">Loading channels...</span>
-            </div>
-
-            <hr class="panel-divider" />
-
-            <div class="channel-sections">
-              <section class="channel-section">
-                <h3 class="channel-section-title">Email</h3>
-                <div class="subtle">SMTP settings for alert emails.</div>
-                <div class="channel-grid">
-                  <div>
-                    <label for="emailEnabled">Enabled</label>
-                    <select id="emailEnabled">
-                      <option value="true">Enabled</option>
-                      <option value="false">Disabled</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="emailSmtpHost">SMTP Host</label>
-                    <input id="emailSmtpHost" type="text" placeholder="smtp.example.com" />
-                  </div>
-                  <div>
-                    <label for="emailSmtpPort">SMTP Port</label>
-                    <input id="emailSmtpPort" type="number" step="1" placeholder="587" />
-                  </div>
-                  <div>
-                    <label for="emailStarttls">STARTTLS</label>
-                    <select id="emailStarttls">
-                      <option value="true">Enabled</option>
-                      <option value="false">Disabled</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="emailUsername">Username</label>
-                    <input id="emailUsername" type="text" />
-                  </div>
-                  <div>
-                    <label for="emailPassword">Password</label>
-                    <input id="emailPassword" type="password" />
-                  </div>
-                  <div>
-                    <label for="emailFromAddr">From</label>
-                    <input id="emailFromAddr" type="text" placeholder="kiln@example.com" />
-                  </div>
-                  <div>
-                    <label for="emailToAddr">To</label>
-                    <input id="emailToAddr" type="text" placeholder="you@example.com" />
-                  </div>
-                </div>
-              </section>
-
-              <section class="channel-section">
-                <h3 class="channel-section-title">SMS</h3>
-                <div class="subtle">Twilio settings for text alerts.</div>
-                <div class="channel-grid">
-                  <div>
-                    <label for="smsEnabled">Enabled</label>
-                    <select id="smsEnabled">
-                      <option value="true">Enabled</option>
-                      <option value="false">Disabled</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="smsAccountSid">Account SID</label>
-                    <input id="smsAccountSid" type="text" />
-                  </div>
-                  <div>
-                    <label for="smsAuthToken">Auth Token</label>
-                    <input id="smsAuthToken" type="password" />
-                  </div>
-                  <div>
-                    <label for="smsFromNumber">From Number</label>
-                    <input id="smsFromNumber" type="text" placeholder="+15551234567" />
-                  </div>
-                  <div>
-                    <label for="smsToNumber">To Number</label>
-                    <input id="smsToNumber" type="text" placeholder="+15557654321" />
-                  </div>
-                </div>
-              </section>
-
-              <section class="channel-section">
-                <h3 class="channel-section-title">Push</h3>
-                <div class="subtle">Generic webhook endpoint for push integrations.</div>
-                <div class="channel-grid">
-                  <div>
-                    <label for="pushEnabled">Enabled</label>
-                    <select id="pushEnabled">
-                      <option value="true">Enabled</option>
-                      <option value="false">Disabled</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="pushWebhookUrl">Webhook URL</label>
-                    <input id="pushWebhookUrl" type="text" placeholder="https://example.com/hook" />
-                  </div>
-                </div>
-              </section>
-            </div>
-            <div class="subtle test-status" id="testAlertStatus"></div>
-          </section>
-
-          <section id="alertWatchdogTab" class="tab-panel" data-alert-tab-panel="watchdog" hidden>
-            <div class="channel-toolbar">
-              <button type="button" id="saveWatchdogSettingsButton">Save Watchdog Settings</button>
-              <button type="button" id="resetWatchdogSettingsButton">Reload Saved Settings</button>
-            </div>
-            <div id="watchdogSettingsStatus" class="success-text"></div>
-
-            <hr class="panel-divider" />
-
-            <div class="subtle">
-              Built-in watchdog alerts cover monitor health conditions such as repeated sensor faults and stale data, even when no user-defined temperature rule has fired.
-            </div>
-            <div class="subtle">
-              Changes here take effect after restarting the `kiln-monitor` service.
-            </div>
-
-            <hr class="panel-divider" />
-
-            <div class="watchdog-grid">
-              <div>
-                <label for="watchdogFaultStreakThreshold">Fault Streak Threshold</label>
-                <input id="watchdogFaultStreakThreshold" type="number" min="1" step="1" />
-              </div>
-              <div>
-                <label for="watchdogStaleDataSeconds">Stale Data Seconds</label>
-                <input id="watchdogStaleDataSeconds" type="number" min="1" step="1" />
-              </div>
-              <div>
-                <label for="watchdogCooldownMinutes">Cooldown Minutes</label>
-                <input id="watchdogCooldownMinutes" type="number" min="0" step="0.1" />
-              </div>
-            </div>
-          </section>
-
-          <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="log" hidden>
-            <div class="tab-panel-header">
-              <div>
-                <div class="label">Alert Log</div>
-                <div class="delivery-summary" id="deliveriesSummary">Checking recent alert activity and delivery attempts...</div>
-              </div>
-            </div>
-
-            <div class="rules-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Rule</th>
-                    <th>Channel</th>
-                    <th>Result</th>
-                    <th>Detail</th>
-                  </tr>
-                </thead>
-                <tbody id="deliveriesTableBody">
-                  <tr><td colspan="5" class="subtle">Loading deliveries...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
         </section>
 
         <section class="profiles-panel">
@@ -1479,6 +1199,9 @@ PAGE_HTML = """<!doctype html>
     };
 
     function setActiveAlertTab(tabName) {
+      if (!alertTabButtons.length || !alertTabPanels.length) {
+        return;
+      }
       alertTabButtons.forEach((button) => {
         const isActive = button.dataset.alertTab === tabName;
         button.classList.toggle("active", isActive);
@@ -1689,17 +1412,23 @@ PAGE_HTML = """<!doctype html>
     }
 
     function updateRuleUnitLabels() {
-      const ruleType = document.getElementById("ruleType").value;
-      const suffix = unitSuffix();
+      const ruleTypeInput = document.getElementById("ruleType");
+      const thresholdLabel = document.getElementById("ruleThresholdLabel");
+      const hysteresisLabel = document.getElementById("ruleHysteresisLabel");
       const hysteresisInput = document.getElementById("ruleHysteresis");
+      if (!ruleTypeInput || !thresholdLabel || !hysteresisLabel || !hysteresisInput) {
+        return;
+      }
+      const ruleType = ruleTypeInput.value;
+      const suffix = unitSuffix();
       if (ruleType === "TIME_ELAPSED") {
-        ruleThresholdLabel.textContent = "Elapsed Minutes";
-        ruleHysteresisLabel.textContent = "Reset Gap";
+        thresholdLabel.textContent = "Elapsed Minutes";
+        hysteresisLabel.textContent = "Reset Gap";
         hysteresisInput.disabled = true;
         hysteresisInput.value = "0";
       } else {
-        ruleThresholdLabel.textContent = `Threshold ${suffix}`;
-        ruleHysteresisLabel.textContent = `Reset Gap ${suffix}`;
+        thresholdLabel.textContent = `Threshold ${suffix}`;
+        hysteresisLabel.textContent = `Reset Gap ${suffix}`;
         hysteresisInput.disabled = false;
       }
     }
@@ -1792,6 +1521,9 @@ PAGE_HTML = """<!doctype html>
     }
 
     function resetRuleForm() {
+      if (!ruleForm || !ruleSubmit || !ruleError) {
+        return;
+      }
       editingRuleId = null;
       ruleForm.reset();
       document.getElementById("ruleType").value = "TARGET_REACHED";
@@ -2652,6 +2384,9 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function refreshAlertRules() {
+      if (!rulesTableBody) {
+        return;
+      }
       const response = await fetch("/api/alert-rules");
       const payload = await response.json();
       const rules = payload.rules || [];
@@ -2736,6 +2471,9 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function refreshAlertDeliveries() {
+      if (!deliveriesTableBody || !deliveriesSummary) {
+        return;
+      }
       const response = await fetch("/api/alert-deliveries");
       const payload = await response.json();
       const deliveries = payload.deliveries || [];
@@ -2767,6 +2505,9 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function refreshAlertChannels() {
+      if (!channelHealth) {
+        return;
+      }
       const response = await fetch("/api/alert-channels");
       const payload = await response.json();
       alertChannelStatus = payload.channels || {};
@@ -2774,12 +2515,18 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function refreshAlertChannelSettings() {
+      if (!emailEnabled) {
+        return;
+      }
       const response = await fetch("/api/alert-channel-settings");
       const payload = await response.json();
       populateChannelSettingsForm(payload.settings || {});
     }
 
     async function saveAlertChannelSettings() {
+      if (!channelSettingsStatus) {
+        return;
+      }
       channelSettingsStatus.textContent = "Saving channel settings...";
       const response = await fetch("/api/alert-channel-settings", {
         method: "POST",
@@ -2798,12 +2545,18 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function refreshWatchdogSettings() {
+      if (!watchdogFaultStreakThreshold) {
+        return;
+      }
       const response = await fetch("/api/watchdog-settings");
       const payload = await response.json();
       populateWatchdogSettingsForm(payload.settings || {});
     }
 
     async function saveWatchdogSettings() {
+      if (!watchdogSettingsStatus) {
+        return;
+      }
       watchdogSettingsStatus.textContent = "Saving watchdog settings...";
       const response = await fetch("/api/watchdog-settings", {
         method: "POST",
@@ -2821,6 +2574,9 @@ PAGE_HTML = """<!doctype html>
     }
 
     async function sendTestAlert(channels) {
+      if (!testAlertStatus) {
+        return;
+      }
       testAlertStatus.textContent = "Sending test alert...";
       const response = await fetch("/api/test-alert", {
         method: "POST",
@@ -2859,15 +2615,22 @@ PAGE_HTML = """<!doctype html>
 
     async function refreshAll() {
       try {
-        await Promise.all([
+        const refreshTasks = [
           refreshStatus(),
           refreshHistory(),
           refreshProfiles(),
           refreshCameraStatus(),
-          refreshAlertRules(),
-          refreshAlertDeliveries(),
-          refreshAlertChannels(),
-        ]);
+        ];
+        if (rulesTableBody) {
+          refreshTasks.push(refreshAlertRules());
+        }
+        if (deliveriesTableBody) {
+          refreshTasks.push(refreshAlertDeliveries());
+        }
+        if (channelHealth) {
+          refreshTasks.push(refreshAlertChannels());
+        }
+        await Promise.all(refreshTasks);
       } catch (error) {
         banner.textContent = `Dashboard refresh failed: ${error}`;
         banner.className = "status-banner status-error";
@@ -2903,25 +2666,29 @@ PAGE_HTML = """<!doctype html>
       });
     });
 
-    saveChannelSettingsButton.addEventListener("click", async () => {
-      await saveAlertChannelSettings();
-    });
+    if (saveChannelSettingsButton && resetChannelSettingsButton && channelSettingsStatus) {
+      saveChannelSettingsButton.addEventListener("click", async () => {
+        await saveAlertChannelSettings();
+      });
 
-    resetChannelSettingsButton.addEventListener("click", async () => {
-      channelSettingsStatus.textContent = "Reloading saved settings...";
-      await refreshAlertChannelSettings();
-      channelSettingsStatus.textContent = "Saved settings reloaded.";
-    });
+      resetChannelSettingsButton.addEventListener("click", async () => {
+        channelSettingsStatus.textContent = "Reloading saved settings...";
+        await refreshAlertChannelSettings();
+        channelSettingsStatus.textContent = "Saved settings reloaded.";
+      });
+    }
 
-    saveWatchdogSettingsButton.addEventListener("click", async () => {
-      await saveWatchdogSettings();
-    });
+    if (saveWatchdogSettingsButton && resetWatchdogSettingsButton && watchdogSettingsStatus) {
+      saveWatchdogSettingsButton.addEventListener("click", async () => {
+        await saveWatchdogSettings();
+      });
 
-    resetWatchdogSettingsButton.addEventListener("click", async () => {
-      watchdogSettingsStatus.textContent = "Reloading saved settings...";
-      await refreshWatchdogSettings();
-      watchdogSettingsStatus.textContent = "Saved settings reloaded.";
-    });
+      resetWatchdogSettingsButton.addEventListener("click", async () => {
+        watchdogSettingsStatus.textContent = "Reloading saved settings...";
+        await refreshWatchdogSettings();
+        watchdogSettingsStatus.textContent = "Saved settings reloaded.";
+      });
+    }
 
     unitSelect.addEventListener("change", async () => {
       selectedUnit = unitSelect.value;
@@ -2993,51 +2760,53 @@ PAGE_HTML = """<!doctype html>
     document.getElementById("inlineResetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
     document.getElementById("inlineResetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
 
-    ruleForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      ruleError.textContent = "";
-      const ruleType = document.getElementById("ruleType").value;
-      const payload = {
-        name: document.getElementById("ruleName").value.trim(),
-        rule_type: ruleType,
-        threshold_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
-        trigger_minutes: ruleType === "TIME_ELAPSED" ? Number(document.getElementById("ruleThreshold").value) : null,
-        severity: document.getElementById("ruleSeverity").value,
-        hysteresis_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
-        notify_cooldown_minutes: Number(document.getElementById("ruleCooldown").value),
-        enabled: document.getElementById("ruleEnabled").value === "true",
-        color_hex: document.getElementById("ruleColor").value,
-        notify_email: document.getElementById("ruleNotifyEmail").value === "true",
-        notify_sms: document.getElementById("ruleNotifySms").value === "true",
-        notify_push: document.getElementById("ruleNotifyPush").value === "true",
-      };
+    if (ruleForm && ruleCancel) {
+      ruleForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        ruleError.textContent = "";
+        const ruleType = document.getElementById("ruleType").value;
+        const payload = {
+          name: document.getElementById("ruleName").value.trim(),
+          rule_type: ruleType,
+          threshold_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
+          trigger_minutes: ruleType === "TIME_ELAPSED" ? Number(document.getElementById("ruleThreshold").value) : null,
+          severity: document.getElementById("ruleSeverity").value,
+          hysteresis_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
+          notify_cooldown_minutes: Number(document.getElementById("ruleCooldown").value),
+          enabled: document.getElementById("ruleEnabled").value === "true",
+          color_hex: document.getElementById("ruleColor").value,
+          notify_email: document.getElementById("ruleNotifyEmail").value === "true",
+          notify_sms: document.getElementById("ruleNotifySms").value === "true",
+          notify_push: document.getElementById("ruleNotifyPush").value === "true",
+        };
 
-      const path = editingRuleId === null
-        ? "/api/alert-rules"
-        : `/api/alert-rules/${editingRuleId}`;
+        const path = editingRuleId === null
+          ? "/api/alert-rules"
+          : `/api/alert-rules/${editingRuleId}`;
 
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          ruleError.textContent = result.error || "Failed to save alert rule.";
+          return;
+        }
+
+        resetRuleForm();
+        await refreshAlertRules();
       });
-      const result = await response.json();
-      if (!response.ok) {
-        ruleError.textContent = result.error || "Failed to save alert rule.";
-        return;
-      }
 
-      resetRuleForm();
-      await refreshAlertRules();
-    });
+      ruleCancel.addEventListener("click", () => {
+        resetRuleForm();
+      });
 
-    ruleCancel.addEventListener("click", () => {
-      resetRuleForm();
-    });
-
-    document.getElementById("ruleType").addEventListener("change", () => {
-      updateRuleUnitLabels();
-    });
+      document.getElementById("ruleType").addEventListener("change", () => {
+        updateRuleUnitLabels();
+      });
+    }
 
     eventForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -3143,6 +2912,1145 @@ PAGE_HTML = """<!doctype html>
       await refreshWatchdogSettings();
       await refreshAll();
     });
+    setInterval(refreshAll, 5000);
+  </script>
+</body>
+</html>
+"""
+
+ALERTS_PAGE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kiln Monitor Alerts</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: #0b1220;
+      color: #e5e7eb;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
+        linear-gradient(180deg, #131d31, #0b1220);
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .card, .rules-panel {
+      background: #111827;
+      border: 1px solid rgba(56, 189, 248, 0.18);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .subtle {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .section-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+      align-items: start;
+    }
+    .recent-alerts-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .recent-alert-item {
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .recent-alert-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .recent-alert-title {
+      font-weight: 700;
+      font-size: 0.98rem;
+    }
+    .recent-alert-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: #334155;
+    }
+    .pill-on {
+      background: #065f46;
+    }
+    .pill-off {
+      background: #475569;
+    }
+    .pill-active {
+      background: #7c2d12;
+    }
+    .pill-info {
+      background: #1d4ed8;
+    }
+    .pill-warning {
+      background: #92400e;
+    }
+    .pill-critical {
+      background: #991b1b;
+    }
+    .nav-button, button {
+      border: 1px solid #334155;
+      background: #1f2937;
+      color: #e5e7eb;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    button.active {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    .tab-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 12px 0 18px;
+    }
+    .tab-panel[hidden] {
+      display: none;
+    }
+    .rules-grid, .channel-grid, .watchdog-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-bottom: 16px;
+    }
+    .channel-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .channel-toolbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .channel-health {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .channel-status-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .channel-status-main {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .channel-status-name, .channel-section-title {
+      font-weight: 700;
+    }
+    .channel-sections {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .channel-section {
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 12px;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.28);
+    }
+    .rules-table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.95rem;
+      vertical-align: top;
+    }
+    label {
+      display: block;
+      color: #9ca3af;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .rule-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .color-input {
+      height: 46px;
+      padding: 6px;
+    }
+    .color-swatch {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      margin-right: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      vertical-align: middle;
+    }
+    .delivery-summary, .success-text, .error-text {
+      min-height: 1.2em;
+    }
+    .success-text {
+      color: #86efac;
+    }
+    .error-text {
+      color: #fca5a5;
+    }
+    .delivery-detail {
+      color: #cbd5e1;
+      max-width: 320px;
+    }
+    .channel-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      background: rgba(56, 189, 248, 0.14);
+      color: #bae6fd;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .channel-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .panel-divider {
+      border: 0;
+      height: 1px;
+      background: #1f2937;
+      margin: 16px 0;
+    }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 960px) {
+      .section-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .page-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page-header">
+      <div>
+        <h1>Alerts</h1>
+        <div class="subtle">Keep configuration, delivery checks, and the most recent alert activity in one place.</div>
+      </div>
+      <div class="header-actions">
+        <a href="/" class="nav-button">Back To Dashboard</a>
+        <button type="button" id="refreshAlertsPageButton">Refresh Alerts</button>
+      </div>
+    </section>
+
+    <section class="section-grid">
+      <section class="card">
+        <div class="label">Recent Alerts</div>
+        <div class="subtle">Showing the last 6 alert events, not just delivery attempts.</div>
+        <div id="recentAlertsList" class="recent-alerts-list">
+          <div class="subtle">Loading recent alerts...</div>
+        </div>
+      </section>
+
+      <section class="rules-panel">
+        <div class="label">Alert Rules</div>
+        <div class="subtle">Define the rules, delivery channels, and watchdog thresholds here so the main dashboard can stay focused on the firing itself.</div>
+
+        <div class="tab-strip" role="tablist" aria-label="Alerting tabs">
+          <button type="button" class="tab-button active" data-alert-tab="rules" role="tab" aria-selected="true">Rules</button>
+          <button type="button" class="tab-button" data-alert-tab="channels" role="tab" aria-selected="false">Channel Setup</button>
+          <button type="button" class="tab-button" data-alert-tab="watchdog" role="tab" aria-selected="false">Watchdog</button>
+          <button type="button" class="tab-button" data-alert-tab="log" role="tab" aria-selected="false">Message Log</button>
+        </div>
+
+        <section id="alertRulesTab" class="tab-panel" data-alert-tab-panel="rules">
+          <form id="ruleForm">
+            <div class="rules-grid">
+              <div>
+                <label for="ruleName">Name</label>
+                <input id="ruleName" name="name" placeholder="Cone 06 reached" required />
+              </div>
+              <div>
+                <label for="ruleType">Type</label>
+                <select id="ruleType" name="rule_type">
+                  <option value="TARGET_REACHED">Target Reached</option>
+                  <option value="ABOVE_HIGH">Above High</option>
+                  <option value="BELOW_LOW">Below Low</option>
+                  <option value="TIME_ELAPSED">Time Elapsed</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleThreshold" id="ruleThresholdLabel">Threshold F</label>
+                <input id="ruleThreshold" name="threshold_f" type="number" step="0.1" required />
+              </div>
+              <div>
+                <label for="ruleSeverity">Severity</label>
+                <select id="ruleSeverity" name="severity">
+                  <option value="INFO">Info</option>
+                  <option value="WARNING" selected>Warning</option>
+                  <option value="CRITICAL">Critical</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleHysteresis" id="ruleHysteresisLabel">Reset Gap F</label>
+                <input id="ruleHysteresis" name="hysteresis_f" type="number" step="0.1" value="5" required />
+              </div>
+              <div>
+                <label for="ruleCooldown">Cooldown Minutes</label>
+                <input id="ruleCooldown" name="notify_cooldown_minutes" type="number" step="0.1" value="15" min="0" required />
+              </div>
+              <div>
+                <label for="ruleEnabled">Enabled</label>
+                <select id="ruleEnabled" name="enabled">
+                  <option value="true" selected>Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleColor">Accent Color</label>
+                <input id="ruleColor" name="color_hex" class="color-input" type="color" value="#38bdf8" />
+              </div>
+              <div>
+                <label for="ruleNotifyEmail">Email</label>
+                <select id="ruleNotifyEmail" name="notify_email">
+                  <option value="false" selected>Off</option>
+                  <option value="true">On</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleNotifySms">SMS</label>
+                <select id="ruleNotifySms" name="notify_sms">
+                  <option value="false" selected>Off</option>
+                  <option value="true">On</option>
+                </select>
+              </div>
+              <div>
+                <label for="ruleNotifyPush">Push</label>
+                <select id="ruleNotifyPush" name="notify_push">
+                  <option value="false" selected>Off</option>
+                  <option value="true">On</option>
+                </select>
+              </div>
+            </div>
+            <div class="rule-actions">
+              <button type="submit" id="ruleSubmit">Add Rule</button>
+              <button type="button" id="ruleCancel">Cancel Edit</button>
+            </div>
+            <div id="ruleError" class="error-text"></div>
+          </form>
+
+          <div class="rules-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Threshold</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Last Triggered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rulesTableBody">
+                <tr><td colspan="7" class="subtle">Loading rules...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="alertChannelsTab" class="tab-panel" data-alert-tab-panel="channels" hidden>
+          <div class="channel-toolbar">
+            <button type="button" id="saveChannelSettingsButton">Save Channel Settings</button>
+            <button type="button" id="resetChannelSettingsButton">Reload Saved Settings</button>
+          </div>
+          <div id="channelSettingsStatus" class="success-text"></div>
+
+          <hr class="panel-divider" />
+
+          <div class="channel-health" id="channelHealth">
+            <span class="pill">Loading channels...</span>
+          </div>
+
+          <hr class="panel-divider" />
+
+          <div class="channel-sections">
+            <section class="channel-section">
+              <div class="channel-section-title">Email</div>
+              <div class="subtle">SMTP settings for alert emails.</div>
+              <div class="channel-grid">
+                <div>
+                  <label for="emailEnabled">Enabled</label>
+                  <select id="emailEnabled">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="emailSmtpHost">SMTP Host</label>
+                  <input id="emailSmtpHost" type="text" placeholder="smtp.example.com" />
+                </div>
+                <div>
+                  <label for="emailSmtpPort">SMTP Port</label>
+                  <input id="emailSmtpPort" type="number" step="1" placeholder="587" />
+                </div>
+                <div>
+                  <label for="emailStarttls">STARTTLS</label>
+                  <select id="emailStarttls">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="emailUsername">Username</label>
+                  <input id="emailUsername" type="text" />
+                </div>
+                <div>
+                  <label for="emailPassword">Password</label>
+                  <input id="emailPassword" type="password" />
+                </div>
+                <div>
+                  <label for="emailFromAddr">From</label>
+                  <input id="emailFromAddr" type="text" placeholder="kiln@example.com" />
+                </div>
+                <div>
+                  <label for="emailToAddr">To</label>
+                  <input id="emailToAddr" type="text" placeholder="you@example.com" />
+                </div>
+              </div>
+            </section>
+
+            <section class="channel-section">
+              <div class="channel-section-title">SMS</div>
+              <div class="subtle">Twilio settings for text alerts.</div>
+              <div class="channel-grid">
+                <div>
+                  <label for="smsEnabled">Enabled</label>
+                  <select id="smsEnabled">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="smsAccountSid">Account SID</label>
+                  <input id="smsAccountSid" type="text" />
+                </div>
+                <div>
+                  <label for="smsAuthToken">Auth Token</label>
+                  <input id="smsAuthToken" type="password" />
+                </div>
+                <div>
+                  <label for="smsFromNumber">From Number</label>
+                  <input id="smsFromNumber" type="text" placeholder="+15551234567" />
+                </div>
+                <div>
+                  <label for="smsToNumber">To Number</label>
+                  <input id="smsToNumber" type="text" placeholder="+15557654321" />
+                </div>
+              </div>
+            </section>
+
+            <section class="channel-section">
+              <div class="channel-section-title">Push</div>
+              <div class="subtle">Generic webhook endpoint for push integrations.</div>
+              <div class="channel-grid">
+                <div>
+                  <label for="pushEnabled">Enabled</label>
+                  <select id="pushEnabled">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="pushWebhookUrl">Webhook URL</label>
+                  <input id="pushWebhookUrl" type="text" placeholder="https://example.com/hook" />
+                </div>
+              </div>
+            </section>
+          </div>
+          <div class="subtle" id="testAlertStatus"></div>
+        </section>
+
+        <section id="alertWatchdogTab" class="tab-panel" data-alert-tab-panel="watchdog" hidden>
+          <div class="channel-toolbar">
+            <button type="button" id="saveWatchdogSettingsButton">Save Watchdog Settings</button>
+            <button type="button" id="resetWatchdogSettingsButton">Reload Saved Settings</button>
+          </div>
+          <div id="watchdogSettingsStatus" class="success-text"></div>
+
+          <hr class="panel-divider" />
+
+          <div class="subtle">Built-in watchdog alerts cover repeated sensor faults and stale data, even when no user rule has fired.</div>
+          <div class="subtle">Changes here take effect after restarting the `kiln-monitor` service.</div>
+
+          <hr class="panel-divider" />
+
+          <div class="watchdog-grid">
+            <div>
+              <label for="watchdogFaultStreakThreshold">Fault Streak Threshold</label>
+              <input id="watchdogFaultStreakThreshold" type="number" min="1" step="1" />
+            </div>
+            <div>
+              <label for="watchdogStaleDataSeconds">Stale Data Seconds</label>
+              <input id="watchdogStaleDataSeconds" type="number" min="1" step="1" />
+            </div>
+            <div>
+              <label for="watchdogCooldownMinutes">Cooldown Minutes</label>
+              <input id="watchdogCooldownMinutes" type="number" min="0" step="0.1" />
+            </div>
+          </div>
+        </section>
+
+        <section id="alertDeliveriesTab" class="tab-panel" data-alert-tab-panel="log" hidden>
+          <div class="label">Message Log</div>
+          <div class="delivery-summary" id="deliveriesSummary">Checking recent alert activity and delivery attempts...</div>
+
+          <div class="rules-table-wrap" style="margin-top: 14px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Rule</th>
+                  <th>Channel</th>
+                  <th>Result</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="deliveriesTableBody">
+                <tr><td colspan="5" class="subtle">Loading deliveries...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const recentAlertsList = document.getElementById("recentAlertsList");
+    const ruleForm = document.getElementById("ruleForm");
+    const ruleSubmit = document.getElementById("ruleSubmit");
+    const ruleCancel = document.getElementById("ruleCancel");
+    const ruleError = document.getElementById("ruleError");
+    const rulesTableBody = document.getElementById("rulesTableBody");
+    const deliveriesTableBody = document.getElementById("deliveriesTableBody");
+    const deliveriesSummary = document.getElementById("deliveriesSummary");
+    const channelHealth = document.getElementById("channelHealth");
+    const emailEnabled = document.getElementById("emailEnabled");
+    const emailSmtpHost = document.getElementById("emailSmtpHost");
+    const emailSmtpPort = document.getElementById("emailSmtpPort");
+    const emailStarttls = document.getElementById("emailStarttls");
+    const emailUsername = document.getElementById("emailUsername");
+    const emailPassword = document.getElementById("emailPassword");
+    const emailFromAddr = document.getElementById("emailFromAddr");
+    const emailToAddr = document.getElementById("emailToAddr");
+    const smsEnabled = document.getElementById("smsEnabled");
+    const smsAccountSid = document.getElementById("smsAccountSid");
+    const smsAuthToken = document.getElementById("smsAuthToken");
+    const smsFromNumber = document.getElementById("smsFromNumber");
+    const smsToNumber = document.getElementById("smsToNumber");
+    const pushEnabled = document.getElementById("pushEnabled");
+    const pushWebhookUrl = document.getElementById("pushWebhookUrl");
+    const saveChannelSettingsButton = document.getElementById("saveChannelSettingsButton");
+    const resetChannelSettingsButton = document.getElementById("resetChannelSettingsButton");
+    const channelSettingsStatus = document.getElementById("channelSettingsStatus");
+    const testAlertStatus = document.getElementById("testAlertStatus");
+    const watchdogFaultStreakThreshold = document.getElementById("watchdogFaultStreakThreshold");
+    const watchdogStaleDataSeconds = document.getElementById("watchdogStaleDataSeconds");
+    const watchdogCooldownMinutes = document.getElementById("watchdogCooldownMinutes");
+    const saveWatchdogSettingsButton = document.getElementById("saveWatchdogSettingsButton");
+    const resetWatchdogSettingsButton = document.getElementById("resetWatchdogSettingsButton");
+    const watchdogSettingsStatus = document.getElementById("watchdogSettingsStatus");
+    const alertTabButtons = Array.from(document.querySelectorAll("[data-alert-tab]"));
+    const alertTabPanels = Array.from(document.querySelectorAll("[data-alert-tab-panel]"));
+    let editingRuleId = null;
+    let currentRules = [];
+    let alertChannelStatus = {};
+    let alertChannelSettings = {};
+    let watchdogSettings = {};
+
+    function formatTimestamp(isoText) {
+      if (!isoText) {
+        return "--";
+      }
+      return new Date(isoText).toLocaleString();
+    }
+
+    function formatRuleTemperature(tempF) {
+      if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
+        return "--";
+      }
+      return `${Number(tempF).toFixed(1)} F`;
+    }
+
+    function formatRuleDelta(tempF) {
+      if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
+        return "--";
+      }
+      return `${Number(tempF).toFixed(1)} F`;
+    }
+
+    function humanizeRuleType(ruleType) {
+      if (ruleType === "TARGET_REACHED") {
+        return "Target";
+      }
+      if (ruleType === "ABOVE_HIGH") {
+        return "High";
+      }
+      if (ruleType === "BELOW_LOW") {
+        return "Low";
+      }
+      if (ruleType === "TIME_ELAPSED") {
+        return "Elapsed";
+      }
+      return ruleType;
+    }
+
+    function levelClass(level) {
+      if (level === "CRITICAL") {
+        return "pill-critical";
+      }
+      if (level === "WARNING") {
+        return "pill-warning";
+      }
+      return "pill-info";
+    }
+
+    function setActiveAlertTab(tabName) {
+      alertTabButtons.forEach((button) => {
+        const isActive = button.dataset.alertTab === tabName;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      alertTabPanels.forEach((panel) => {
+        panel.hidden = panel.dataset.alertTabPanel !== tabName;
+      });
+    }
+
+    function updateRuleUnitLabels() {
+      const ruleType = document.getElementById("ruleType").value;
+      const thresholdLabel = document.getElementById("ruleThresholdLabel");
+      const hysteresisLabel = document.getElementById("ruleHysteresisLabel");
+      const hysteresisInput = document.getElementById("ruleHysteresis");
+      if (ruleType === "TIME_ELAPSED") {
+        thresholdLabel.textContent = "Elapsed Minutes";
+        hysteresisLabel.textContent = "Reset Gap";
+        hysteresisInput.disabled = true;
+        hysteresisInput.value = "0";
+      } else {
+        thresholdLabel.textContent = "Threshold F";
+        hysteresisLabel.textContent = "Reset Gap F";
+        hysteresisInput.disabled = false;
+      }
+    }
+
+    function resetRuleForm() {
+      editingRuleId = null;
+      ruleForm.reset();
+      document.getElementById("ruleType").value = "TARGET_REACHED";
+      document.getElementById("ruleSeverity").value = "WARNING";
+      document.getElementById("ruleEnabled").value = "true";
+      document.getElementById("ruleHysteresis").value = "5";
+      document.getElementById("ruleCooldown").value = "15";
+      document.getElementById("ruleColor").value = "#38bdf8";
+      document.getElementById("ruleNotifyEmail").value = "false";
+      document.getElementById("ruleNotifySms").value = "false";
+      document.getElementById("ruleNotifyPush").value = "false";
+      ruleSubmit.textContent = "Add Rule";
+      ruleError.textContent = "";
+      updateRuleUnitLabels();
+    }
+
+    function renderRecentAlerts(alerts) {
+      if (!alerts.length) {
+        recentAlertsList.innerHTML = '<div class="subtle">No alert events have been logged yet.</div>';
+        return;
+      }
+      recentAlertsList.innerHTML = "";
+      alerts.forEach((alert) => {
+        const item = document.createElement("div");
+        item.className = "recent-alert-item";
+        item.innerHTML = `
+          <div class="recent-alert-top">
+            <div class="recent-alert-title">${alert.rule_name || alert.kind}</div>
+            <span class="pill ${levelClass(alert.level)}">${alert.level}</span>
+          </div>
+          <div class="subtle">${formatTimestamp(alert.timestamp_utc)}<span style="margin-left:8px;">${alert.sample_age}</span></div>
+          <div style="margin-top:8px;">${alert.detail || "No detail recorded."}</div>
+          <div class="recent-alert-meta">
+            <span class="pill">${alert.kind}</span>
+            <span class="pill">${alert.temp_f === null || alert.temp_f === undefined ? "No temp" : formatRuleTemperature(alert.temp_f)}</span>
+          </div>
+        `;
+        recentAlertsList.appendChild(item);
+      });
+    }
+
+    function renderChannelHealth() {
+      const channelLabels = {
+        EMAIL: "Email",
+        SMS: "SMS",
+        PUSH: "Push",
+      };
+      channelHealth.innerHTML = "";
+      ["EMAIL", "SMS", "PUSH"].forEach((channel) => {
+        const configured = Boolean(alertChannelStatus[channel]);
+        const row = document.createElement("div");
+        row.className = "channel-status-row";
+        const statusClass = configured ? "pill pill-on" : "pill pill-warning";
+        const statusText = configured ? "Configured" : "Not Configured";
+        row.innerHTML = `
+          <div class="channel-status-main">
+            <div class="channel-status-name">${channelLabels[channel]}</div>
+            <span class="${statusClass}">${statusText}</span>
+          </div>
+          <button type="button" class="channel-test-button" data-test-channel="${channel}" ${configured ? "" : "disabled"}>Test</button>
+        `;
+        channelHealth.appendChild(row);
+      });
+
+      channelHealth.querySelectorAll("[data-test-channel]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await sendTestAlert([button.dataset.testChannel]);
+        });
+      });
+    }
+
+    function populateChannelSettingsForm(settings) {
+      alertChannelSettings = settings || {};
+      const email = alertChannelSettings.email || {};
+      const sms = alertChannelSettings.sms || {};
+      const push = alertChannelSettings.push || {};
+
+      emailEnabled.value = String(Boolean(email.enabled));
+      emailSmtpHost.value = email.smtp_host || "";
+      emailSmtpPort.value = email.smtp_port ?? 587;
+      emailStarttls.value = String(Boolean(email.starttls));
+      emailUsername.value = email.username || "";
+      emailPassword.value = email.password || "";
+      emailFromAddr.value = email.from_addr || "";
+      emailToAddr.value = email.to_addr || "";
+
+      smsEnabled.value = String(Boolean(sms.enabled));
+      smsAccountSid.value = sms.account_sid || "";
+      smsAuthToken.value = sms.auth_token || "";
+      smsFromNumber.value = sms.from_number || "";
+      smsToNumber.value = sms.to_number || "";
+
+      pushEnabled.value = String(Boolean(push.enabled));
+      pushWebhookUrl.value = push.webhook_url || "";
+    }
+
+    function gatherChannelSettings() {
+      return {
+        email: {
+          enabled: emailEnabled.value === "true",
+          smtp_host: emailSmtpHost.value.trim(),
+          smtp_port: Number(emailSmtpPort.value || "587"),
+          starttls: emailStarttls.value === "true",
+          username: emailUsername.value.trim(),
+          password: emailPassword.value,
+          from_addr: emailFromAddr.value.trim(),
+          to_addr: emailToAddr.value.trim(),
+        },
+        sms: {
+          enabled: smsEnabled.value === "true",
+          account_sid: smsAccountSid.value.trim(),
+          auth_token: smsAuthToken.value,
+          from_number: smsFromNumber.value.trim(),
+          to_number: smsToNumber.value.trim(),
+        },
+        push: {
+          enabled: pushEnabled.value === "true",
+          webhook_url: pushWebhookUrl.value.trim(),
+        },
+      };
+    }
+
+    function populateWatchdogSettingsForm(settings) {
+      watchdogSettings = settings || {};
+      watchdogFaultStreakThreshold.value = watchdogSettings.fault_streak_threshold ?? 5;
+      watchdogStaleDataSeconds.value = watchdogSettings.stale_data_seconds ?? 30;
+      watchdogCooldownMinutes.value = watchdogSettings.notify_cooldown_minutes ?? 30;
+    }
+
+    function gatherWatchdogSettings() {
+      return {
+        fault_streak_threshold: Number(watchdogFaultStreakThreshold.value || "5"),
+        stale_data_seconds: Number(watchdogStaleDataSeconds.value || "30"),
+        notify_cooldown_minutes: Number(watchdogCooldownMinutes.value || "30"),
+      };
+    }
+
+    async function refreshRecentAlerts() {
+      const response = await fetch("/api/recent-alerts");
+      const payload = await response.json();
+      renderRecentAlerts(payload.alerts || []);
+    }
+
+    async function refreshAlertRules() {
+      const response = await fetch("/api/alert-rules");
+      const payload = await response.json();
+      const rules = payload.rules || [];
+      currentRules = rules;
+
+      if (!rules.length) {
+        rulesTableBody.innerHTML = '<tr><td colspan="7" class="subtle">No alert rules configured yet.</td></tr>';
+        return;
+      }
+
+      rulesTableBody.innerHTML = "";
+      rules.forEach((rule) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDelta(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
+          <td>${humanizeRuleType(rule.rule_type)}</td>
+          <td>${rule.rule_type === "TIME_ELAPSED" ? `${Number(rule.trigger_minutes || 0).toFixed(1)} min` : formatRuleTemperature(rule.threshold_f)}</td>
+          <td>${rule.severity}</td>
+          <td>
+            <span class="pill ${rule.enabled ? "pill-on" : "pill-off"}">${rule.enabled ? "Enabled" : "Disabled"}</span>
+            ${rule.active ? '<span class="pill pill-active">Active</span>' : ""}
+          </td>
+          <td>${formatTimestamp(rule.last_triggered_at)}</td>
+          <td>
+            <button type="button" data-edit="${rule.id}">Edit</button>
+            <button type="button" data-clone="${rule.id}">Clone</button>
+            <button type="button" data-delete="${rule.id}">Delete</button>
+          </td>
+        `;
+        rulesTableBody.appendChild(row);
+      });
+
+      rulesTableBody.querySelectorAll("[data-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const rule = rules.find((item) => item.id === Number(button.dataset.edit));
+          if (!rule) {
+            return;
+          }
+          editingRuleId = rule.id;
+          document.getElementById("ruleName").value = rule.name;
+          document.getElementById("ruleType").value = rule.rule_type;
+          document.getElementById("ruleThreshold").value = rule.rule_type === "TIME_ELAPSED"
+            ? Number(rule.trigger_minutes || 0).toFixed(1)
+            : Number(rule.threshold_f).toFixed(1);
+          document.getElementById("ruleSeverity").value = rule.severity;
+          document.getElementById("ruleHysteresis").value = rule.rule_type === "TIME_ELAPSED"
+            ? "0"
+            : Number(rule.hysteresis_f).toFixed(1);
+          document.getElementById("ruleCooldown").value = Number(rule.notify_cooldown_minutes ?? 15).toFixed(1);
+          document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
+          document.getElementById("ruleColor").value = rule.color_hex;
+          document.getElementById("ruleNotifyEmail").value = rule.notify_email ? "true" : "false";
+          document.getElementById("ruleNotifySms").value = rule.notify_sms ? "true" : "false";
+          document.getElementById("ruleNotifyPush").value = rule.notify_push ? "true" : "false";
+          ruleSubmit.textContent = "Save Rule";
+          ruleError.textContent = "";
+          updateRuleUnitLabels();
+        });
+      });
+
+      rulesTableBody.querySelectorAll("[data-clone]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const response = await fetch(`/api/alert-rules/${button.dataset.clone}/clone`, { method: "POST" });
+          const result = await response.json();
+          if (!response.ok) {
+            ruleError.textContent = result.error || "Failed to clone alert rule.";
+            return;
+          }
+          await refreshAlertRules();
+        });
+      });
+
+      rulesTableBody.querySelectorAll("[data-delete]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await fetch(`/api/alert-rules/${button.dataset.delete}/delete`, { method: "POST" });
+          if (editingRuleId === Number(button.dataset.delete)) {
+            resetRuleForm();
+          }
+          await refreshAlertRules();
+        });
+      });
+    }
+
+    async function refreshAlertDeliveries() {
+      const response = await fetch("/api/alert-deliveries");
+      const payload = await response.json();
+      const deliveries = payload.deliveries || [];
+
+      deliveriesSummary.textContent = deliveries.length
+        ? `${deliveries.length} recent alert delivery log entries.`
+        : "No alert delivery log entries have been recorded yet.";
+
+      if (!deliveries.length) {
+        deliveriesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No alert log entries recorded yet.</td></tr>';
+        return;
+      }
+
+      deliveriesTableBody.innerHTML = "";
+      deliveries.forEach((delivery) => {
+        const row = document.createElement("tr");
+        const resultClass = delivery.success ? "pill pill-on" : "pill pill-active";
+        const resultLabel = delivery.success ? "Sent" : "Failed";
+        row.innerHTML = `
+          <td>${formatTimestamp(delivery.timestamp_utc)}<div class="subtle">${delivery.sample_age}</div></td>
+          <td>${delivery.rule_name || "unknown"}</td>
+          <td><div class="channel-badges"><span class="channel-badge">${delivery.channel}</span></div></td>
+          <td><span class="${resultClass}">${resultLabel}</span></td>
+          <td class="delivery-detail">${delivery.detail || "no detail"}</td>
+        `;
+        deliveriesTableBody.appendChild(row);
+      });
+    }
+
+    async function refreshAlertChannels() {
+      const response = await fetch("/api/alert-channels");
+      const payload = await response.json();
+      alertChannelStatus = payload.channels || {};
+      renderChannelHealth();
+    }
+
+    async function refreshAlertChannelSettings() {
+      const response = await fetch("/api/alert-channel-settings");
+      const payload = await response.json();
+      populateChannelSettingsForm(payload.settings || {});
+    }
+
+    async function saveAlertChannelSettings() {
+      channelSettingsStatus.textContent = "Saving channel settings...";
+      const response = await fetch("/api/alert-channel-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: gatherChannelSettings() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        channelSettingsStatus.textContent = payload.error || "Failed to save channel settings.";
+        return;
+      }
+
+      populateChannelSettingsForm(payload.settings || {});
+      channelSettingsStatus.textContent = "Channel settings saved.";
+      await refreshAlertChannels();
+    }
+
+    async function refreshWatchdogSettings() {
+      const response = await fetch("/api/watchdog-settings");
+      const payload = await response.json();
+      populateWatchdogSettingsForm(payload.settings || {});
+    }
+
+    async function saveWatchdogSettings() {
+      watchdogSettingsStatus.textContent = "Saving watchdog settings...";
+      const response = await fetch("/api/watchdog-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: gatherWatchdogSettings() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        watchdogSettingsStatus.textContent = payload.error || "Failed to save watchdog settings.";
+        return;
+      }
+
+      populateWatchdogSettingsForm(payload.settings || {});
+      watchdogSettingsStatus.textContent = "Watchdog settings saved.";
+    }
+
+    async function sendTestAlert(channels) {
+      testAlertStatus.textContent = "Sending test alert...";
+      const response = await fetch("/api/test-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channels }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        testAlertStatus.textContent = payload.error || "Failed to send test alert.";
+        return;
+      }
+      testAlertStatus.textContent = payload.message || "Test alert sent.";
+      await refreshAlertDeliveries();
+      await refreshRecentAlerts();
+    }
+
+    async function refreshAll() {
+      await Promise.all([
+        refreshRecentAlerts(),
+        refreshAlertRules(),
+        refreshAlertDeliveries(),
+        refreshAlertChannels(),
+        refreshAlertChannelSettings(),
+        refreshWatchdogSettings(),
+      ]);
+    }
+
+    alertTabButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setActiveAlertTab(button.dataset.alertTab);
+      });
+    });
+
+    document.getElementById("refreshAlertsPageButton").addEventListener("click", async () => {
+      await refreshAll();
+    });
+
+    saveChannelSettingsButton.addEventListener("click", async () => {
+      await saveAlertChannelSettings();
+    });
+
+    resetChannelSettingsButton.addEventListener("click", async () => {
+      channelSettingsStatus.textContent = "Reloading saved settings...";
+      await refreshAlertChannelSettings();
+      channelSettingsStatus.textContent = "Saved settings reloaded.";
+    });
+
+    saveWatchdogSettingsButton.addEventListener("click", async () => {
+      await saveWatchdogSettings();
+    });
+
+    resetWatchdogSettingsButton.addEventListener("click", async () => {
+      watchdogSettingsStatus.textContent = "Reloading saved settings...";
+      await refreshWatchdogSettings();
+      watchdogSettingsStatus.textContent = "Saved settings reloaded.";
+    });
+
+    ruleForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      ruleError.textContent = "";
+      const ruleType = document.getElementById("ruleType").value;
+      const payload = {
+        name: document.getElementById("ruleName").value.trim(),
+        rule_type: ruleType,
+        threshold_f: ruleType === "TIME_ELAPSED" ? 0 : Number(document.getElementById("ruleThreshold").value),
+        trigger_minutes: ruleType === "TIME_ELAPSED" ? Number(document.getElementById("ruleThreshold").value) : null,
+        severity: document.getElementById("ruleSeverity").value,
+        hysteresis_f: ruleType === "TIME_ELAPSED" ? 0 : Number(document.getElementById("ruleHysteresis").value),
+        notify_cooldown_minutes: Number(document.getElementById("ruleCooldown").value),
+        enabled: document.getElementById("ruleEnabled").value === "true",
+        color_hex: document.getElementById("ruleColor").value,
+        notify_email: document.getElementById("ruleNotifyEmail").value === "true",
+        notify_sms: document.getElementById("ruleNotifySms").value === "true",
+        notify_push: document.getElementById("ruleNotifyPush").value === "true",
+      };
+
+      const path = editingRuleId === null ? "/api/alert-rules" : `/api/alert-rules/${editingRuleId}`;
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        ruleError.textContent = result.error || "Failed to save alert rule.";
+        return;
+      }
+
+      resetRuleForm();
+      await refreshAlertRules();
+    });
+
+    ruleCancel.addEventListener("click", () => {
+      resetRuleForm();
+    });
+
+    document.getElementById("ruleType").addEventListener("change", () => {
+      updateRuleUnitLabels();
+    });
+
+    resetRuleForm();
+    setActiveAlertTab("rules");
+    refreshAll();
     setInterval(refreshAll, 5000);
   </script>
 </body>
@@ -4283,6 +5191,49 @@ def fetch_alert_deliveries(limit: int = 50) -> dict:
     }
 
 
+def fetch_recent_alerts(limit: int = 6) -> dict:
+    if not DATABASE_PATH.exists():
+        return {"alerts": []}
+
+    connection = open_readonly_connection()
+    if connection is None or not table_exists(connection, "alert_log"):
+        if connection is not None:
+            connection.close()
+        return {"alerts": []}
+
+    try:
+        select_fields = "id, timestamp_utc, level, kind, detail, temp_f"
+        if table_has_column(connection, "alert_log", "rule_name"):
+            select_fields += ", rule_name"
+        rows = connection.execute(
+            f"""
+            SELECT {select_fields}
+            FROM alert_log
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return {
+        "alerts": [
+            {
+                "id": row["id"],
+                "timestamp_utc": row["timestamp_utc"],
+                "level": row["level"],
+                "kind": row["kind"],
+                "detail": row["detail"],
+                "temp_f": row["temp_f"],
+                "rule_name": row["rule_name"] if "rule_name" in row.keys() else None,
+                "sample_age": format_sample_age(row["timestamp_utc"]),
+            }
+            for row in rows
+        ]
+    }
+
+
 def fetch_alert_channel_status() -> dict:
     configured_channels = {
         notifier.channel_name: True
@@ -4676,7 +5627,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         parsed_path = urlparse(self.path)
 
         if parsed_path.path == "/":
-            self.send_text_response(PAGE_HTML, content_type="text/html; charset=utf-8")
+            self.send_text_response(DASHBOARD_PAGE_HTML, content_type="text/html; charset=utf-8")
+            return
+
+        if parsed_path.path == "/alerts":
+            self.send_text_response(ALERTS_PAGE_HTML, content_type="text/html; charset=utf-8")
             return
 
         if parsed_path.path == "/camera/latest.jpg":
@@ -4736,6 +5691,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/api/alert-deliveries":
             self.send_json_response(fetch_alert_deliveries())
+            return
+
+        if parsed_path.path == "/api/recent-alerts":
+            self.send_json_response(fetch_recent_alerts())
             return
 
         if parsed_path.path == "/api/alert-channels":
