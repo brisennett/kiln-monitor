@@ -6,6 +6,7 @@ Practical Raspberry Pi kiln monitoring for MAX31855 and MAX31856 thermocouple fr
 
 - Hardware manifest: [`HARDWARE.md`](/Users/briansennett/Documents/codex/kiln-monitor/HARDWARE.md)
 - First boot checklist: [`FIRST_BOOT.md`](/Users/briansennett/Documents/codex/kiln-monitor/FIRST_BOOT.md)
+- First high-temp validation run post-mortem: [`POST_MORTEM_2026-04-18.md`](/Users/briansennett/Documents/codex/kiln-monitor/POST_MORTEM_2026-04-18.md)
 
 ## Why SQLite
 
