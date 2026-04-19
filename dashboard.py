@@ -101,6 +101,13 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     .status-error {
       background: #991b1b;
     }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -191,6 +198,22 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      background: rgba(15, 23, 42, 0.48);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 8px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+    }
+    .page-link.active-page {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      color: #e5e7eb;
     }
     .nav-button, button {
       border: 1px solid #334155;
@@ -761,8 +784,13 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
 <body>
   <main>
     <h1>Kiln Monitor</h1>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link active-page">Dashboard</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link">Faults</a>
+    </section>
     <section class="toolbar">
-      <a href="/alerts" class="nav-button">Alerts</a>
       <button type="button" id="openSetupButton">Dashboard Setup</button>
       <button type="button" id="resetFaultsButton">Reset Faults</button>
       <button type="button" id="resetAlertsButton">Reset Alerts</button>
@@ -836,49 +864,6 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
           </div>
           <canvas id="tempChart"></canvas>
           <div class="subtle">Red dots mark fault samples. Gaps show periods where no valid temperature was logged.</div>
-        </section>
-
-        <section class="ops-grid">
-          <section class="ops-card">
-            <div class="label">Event Markers</div>
-            <div class="subtle">Add manual run notes so we can line up wiring, power, and kiln changes with the fault timeline.</div>
-            <form id="eventForm">
-              <div class="event-form-grid">
-                <div>
-                  <label for="eventType">Event Type</label>
-                  <select id="eventType" name="event_type">
-                    <option value="OPERATION">Operation</option>
-                    <option value="POWER">Power</option>
-                    <option value="OBSERVATION">Observation</option>
-                    <option value="NOTE">Note</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="eventLabel">Label</label>
-                  <input id="eventLabel" name="label" placeholder="Turned third coil on" required />
-                </div>
-                <div style="grid-column: 1 / -1;">
-                  <label for="eventDetail">Detail</label>
-                  <input id="eventDetail" name="detail" placeholder="Optional extra note" />
-                </div>
-              </div>
-              <div class="rule-actions">
-                <button type="submit">Add Marker</button>
-              </div>
-              <div id="eventStatus" class="success-text"></div>
-            </form>
-            <div id="eventList" class="ops-list">
-              <div class="subtle">Loading event markers...</div>
-            </div>
-          </section>
-
-          <section class="ops-card">
-            <div class="label">Fault Diagnostics</div>
-            <div class="subtle">Windowed fault counts and streaks based on the currently selected chart range.</div>
-            <div id="diagnosticsGrid" class="diagnostics-grid">
-              <div class="diagnostic-card"><div class="label">Loading</div><div class="value">--</div></div>
-            </div>
-          </section>
         </section>
 
         <section>
@@ -1541,6 +1526,10 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     }
 
     function renderEventList(events) {
+      if (!eventList) {
+        currentEvents = events || [];
+        return;
+      }
       currentEvents = events || [];
       if (!currentEvents.length) {
         eventList.innerHTML = '<div class="subtle">No event markers in this window yet.</div>';
@@ -1563,6 +1552,9 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     }
 
     function renderDiagnostics(diagnostics) {
+      if (!diagnosticsGrid) {
+        return;
+      }
       if (!diagnostics) {
         diagnosticsGrid.innerHTML = '<div class="diagnostic-card"><div class="label">No data</div><div class="value">--</div></div>';
         return;
@@ -2808,28 +2800,30 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       });
     }
 
-    eventForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      eventStatus.textContent = "Saving marker...";
-      const response = await fetch("/api/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event_type: document.getElementById("eventType").value,
-          label: document.getElementById("eventLabel").value.trim(),
-          detail: document.getElementById("eventDetail").value.trim(),
-        }),
+    if (eventForm && eventStatus) {
+      eventForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        eventStatus.textContent = "Saving marker...";
+        const response = await fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event_type: document.getElementById("eventType").value,
+            label: document.getElementById("eventLabel").value.trim(),
+            detail: document.getElementById("eventDetail").value.trim(),
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          eventStatus.textContent = result.error || "Failed to add event marker.";
+          return;
+        }
+        eventForm.reset();
+        document.getElementById("eventType").value = "OPERATION";
+        eventStatus.textContent = "Event marker added.";
+        await refreshHistory();
       });
-      const result = await response.json();
-      if (!response.ok) {
-        eventStatus.textContent = result.error || "Failed to add event marker.";
-        return;
-      }
-      eventForm.reset();
-      document.getElementById("eventType").value = "OPERATION";
-      eventStatus.textContent = "Event marker added.";
-      await refreshHistory();
-    });
+    }
 
     profileForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2950,6 +2944,13 @@ ALERTS_PAGE_HTML = """<!doctype html>
       margin: 0;
       font-size: 2rem;
     }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -3041,6 +3042,22 @@ ALERTS_PAGE_HTML = """<!doctype html>
     }
     .pill-critical {
       background: #991b1b;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      background: rgba(15, 23, 42, 0.48);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 8px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+    }
+    .page-link.active-page {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+      color: #e5e7eb;
     }
     .nav-button, button {
       border: 1px solid #334155;
@@ -3223,13 +3240,18 @@ ALERTS_PAGE_HTML = """<!doctype html>
 </head>
 <body>
   <main>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link">Dashboard</a>
+      <a href="/alerts" class="page-link active-page">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link">Faults</a>
+    </section>
     <section class="page-header">
       <div>
         <h1>Alerts</h1>
         <div class="subtle">Keep configuration, delivery checks, and the most recent alert activity in one place.</div>
       </div>
       <div class="header-actions">
-        <a href="/" class="nav-button">Back To Dashboard</a>
         <button type="button" id="refreshAlertsPageButton">Refresh Alerts</button>
       </div>
     </section>
@@ -4052,6 +4074,585 @@ ALERTS_PAGE_HTML = """<!doctype html>
     setActiveAlertTab("rules");
     refreshAll();
     setInterval(refreshAll, 5000);
+  </script>
+</body>
+</html>
+"""
+
+EVENTS_PAGE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kiln Monitor Events</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: #0b1220;
+      color: #e5e7eb;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
+        linear-gradient(180deg, #131d31, #0b1220);
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      background: rgba(15, 23, 42, 0.48);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 8px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+    }
+    .page-link.active-page {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+      color: #e5e7eb;
+    }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid rgba(56, 189, 248, 0.18);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+    }
+    .section-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+      align-items: start;
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .subtle {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .event-form-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    label {
+      display: block;
+      color: #9ca3af;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .rule-actions, .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    button {
+      border: 1px solid #334155;
+      background: #1f2937;
+      color: #e5e7eb;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .success-text, .error-text {
+      min-height: 1.2em;
+      margin-top: 12px;
+    }
+    .success-text {
+      color: #86efac;
+    }
+    .error-text {
+      color: #fca5a5;
+    }
+    .rules-table-wrap {
+      overflow-x: auto;
+      margin-top: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.95rem;
+      vertical-align: top;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.14);
+      color: #bae6fd;
+    }
+    @media (max-width: 960px) {
+      .section-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .page-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link">Dashboard</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link active-page">Events</a>
+      <a href="/faults" class="page-link">Faults</a>
+    </section>
+
+    <section class="page-header">
+      <div>
+        <h1>Events</h1>
+        <div class="subtle">Add run markers here and review the full recent event list without crowding the main dashboard.</div>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="refreshEventsButton">Refresh Events</button>
+      </div>
+    </section>
+
+    <section class="section-grid">
+      <section class="card">
+        <div class="label">Add Event Marker</div>
+        <div class="subtle">Use this page for operational notes that should line up with the chart and future event history.</div>
+        <form id="eventForm">
+          <div class="event-form-grid">
+            <div>
+              <label for="eventType">Event Type</label>
+              <select id="eventType" name="event_type">
+                <option value="OPERATION">Operation</option>
+                <option value="POWER">Power</option>
+                <option value="OBSERVATION">Observation</option>
+                <option value="NOTE">Note</option>
+              </select>
+            </div>
+            <div>
+              <label for="eventLabel">Label</label>
+              <input id="eventLabel" name="label" placeholder="Turned third coil on" required />
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="eventDetail">Detail</label>
+              <input id="eventDetail" name="detail" placeholder="Optional extra note" />
+            </div>
+          </div>
+          <div class="rule-actions" style="margin-top: 12px;">
+            <button type="submit">Add Marker</button>
+          </div>
+          <div id="eventStatus" class="success-text"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="label">Recent Events</div>
+        <div class="subtle">Showing the 100 most recent event markers.</div>
+        <div class="rules-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Label</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody id="eventsTableBody">
+              <tr><td colspan="4" class="subtle">Loading events...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const eventForm = document.getElementById("eventForm");
+    const eventStatus = document.getElementById("eventStatus");
+    const eventsTableBody = document.getElementById("eventsTableBody");
+
+    function formatTimestamp(isoText) {
+      if (!isoText) return "--";
+      return new Date(isoText).toLocaleString();
+    }
+
+    function renderEvents(events) {
+      if (!events.length) {
+        eventsTableBody.innerHTML = '<tr><td colspan="4" class="subtle">No events recorded yet.</td></tr>';
+        return;
+      }
+      eventsTableBody.innerHTML = "";
+      events.forEach((item) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${formatTimestamp(item.timestamp_utc)}<div class="subtle">${item.sample_age}</div></td>
+          <td><span class="pill">${item.event_type}</span></td>
+          <td>${item.label}</td>
+          <td>${item.detail || ""}</td>
+        `;
+        eventsTableBody.appendChild(row);
+      });
+    }
+
+    async function refreshEvents() {
+      const response = await fetch("/api/events?limit=100");
+      const payload = await response.json();
+      renderEvents(payload.events || []);
+    }
+
+    eventForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      eventStatus.textContent = "Saving marker...";
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_type: document.getElementById("eventType").value,
+          label: document.getElementById("eventLabel").value.trim(),
+          detail: document.getElementById("eventDetail").value.trim(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        eventStatus.textContent = result.error || "Failed to add event marker.";
+        return;
+      }
+      eventForm.reset();
+      document.getElementById("eventType").value = "OPERATION";
+      eventStatus.textContent = "Event marker added.";
+      await refreshEvents();
+    });
+
+    document.getElementById("refreshEventsButton").addEventListener("click", async () => {
+      await refreshEvents();
+    });
+
+    refreshEvents();
+    setInterval(refreshEvents, 5000);
+  </script>
+</body>
+</html>
+"""
+
+FAULTS_PAGE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kiln Monitor Faults</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: #0b1220;
+      color: #e5e7eb;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
+        linear-gradient(180deg, #131d31, #0b1220);
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      background: rgba(15, 23, 42, 0.48);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 8px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+    }
+    .page-link.active-page {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+      color: #e5e7eb;
+    }
+    .page-header, .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid rgba(56, 189, 248, 0.18);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .subtle {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+    .diagnostics-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 14px;
+    }
+    .diagnostic-card {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .value {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .range-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button {
+      border: 1px solid #334155;
+      background: #1f2937;
+      color: #e5e7eb;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.active {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    .rules-table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.95rem;
+      vertical-align: top;
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .page-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link">Dashboard</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link active-page">Faults</a>
+    </section>
+
+    <section class="page-header">
+      <div>
+        <h1>Faults</h1>
+        <div class="subtle">Review fault rates and recent bad samples here so the main dashboard can stay focused on the live run.</div>
+      </div>
+      <div class="toolbar">
+        <div class="range-buttons">
+          <button type="button" data-range="1h">1h</button>
+          <button type="button" data-range="24h" class="active">24h</button>
+          <button type="button" data-range="7d">7d</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Fault Diagnostics</div>
+      <div class="subtle">Windowed fault counts and streaks based on the selected range.</div>
+      <div id="diagnosticsGrid" class="diagnostics-grid">
+        <div class="diagnostic-card"><div class="label">Loading</div><div class="value">--</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Recent Fault Samples</div>
+      <div class="subtle">Showing up to 100 recent fault rows in the selected window.</div>
+      <div class="rules-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Temperature</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody id="faultsTableBody">
+            <tr><td colspan="3" class="subtle">Loading faults...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const diagnosticsGrid = document.getElementById("diagnosticsGrid");
+    const faultsTableBody = document.getElementById("faultsTableBody");
+    let selectedRange = "24h";
+
+    function formatTimestamp(isoText) {
+      if (!isoText) return "--";
+      return new Date(isoText).toLocaleString();
+    }
+
+    function formatTemp(tempF, tempC) {
+      if (tempF === null || tempF === undefined) {
+        return "--";
+      }
+      const cText = tempC === null || tempC === undefined ? "--" : `${Number(tempC).toFixed(1)} C`;
+      return `${Number(tempF).toFixed(1)} F / ${cText}`;
+    }
+
+    function renderDiagnostics(diagnostics) {
+      if (!diagnostics) {
+        diagnosticsGrid.innerHTML = '<div class="diagnostic-card"><div class="label">No data</div><div class="value">--</div></div>';
+        return;
+      }
+      const detailText = (diagnostics.top_fault_details || []).length
+        ? diagnostics.top_fault_details.map((item) => `${item.detail} (${item.count})`).join(", ")
+        : "No recurring fault details in this window.";
+      diagnosticsGrid.innerHTML = `
+        <div class="diagnostic-card"><div class="label">Fault Samples</div><div class="value">${Number(diagnostics.fault_samples || 0).toLocaleString()}</div></div>
+        <div class="diagnostic-card"><div class="label">Fault Rate</div><div class="value">${Number(diagnostics.fault_rate_percent || 0).toFixed(1)}%</div></div>
+        <div class="diagnostic-card"><div class="label">Longest Streak</div><div class="value">${Number(diagnostics.longest_fault_streak || 0)} samples</div></div>
+        <div class="diagnostic-card"><div class="label">Current Streak</div><div class="value">${Number(diagnostics.current_fault_streak || 0)} samples</div></div>
+        <div class="diagnostic-card"><div class="label">Top Details</div><div class="subtle">${detailText}</div></div>
+      `;
+    }
+
+    function renderFaults(faults) {
+      if (!faults.length) {
+        faultsTableBody.innerHTML = '<tr><td colspan="3" class="subtle">No faults in this window.</td></tr>';
+        return;
+      }
+      faultsTableBody.innerHTML = "";
+      faults.forEach((fault) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${formatTimestamp(fault.timestamp_utc)}<div class="subtle">${fault.sample_age}</div></td>
+          <td>${formatTemp(fault.temp_f, fault.temp_c)}</td>
+          <td>${fault.detail || "fault"}</td>
+        `;
+        faultsTableBody.appendChild(row);
+      });
+    }
+
+    async function refreshFaults() {
+      const response = await fetch(`/api/faults?range=${encodeURIComponent(selectedRange)}&limit=100`);
+      const payload = await response.json();
+      renderDiagnostics(payload.diagnostics || null);
+      renderFaults(payload.faults || []);
+    }
+
+    document.querySelectorAll("button[data-range]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        selectedRange = button.dataset.range;
+        document.querySelectorAll("button[data-range]").forEach((item) => {
+          item.classList.toggle("active", item === button);
+        });
+        await refreshFaults();
+      });
+    });
+
+    refreshFaults();
+    setInterval(refreshFaults, 5000);
   </script>
 </body>
 </html>
@@ -5234,6 +5835,83 @@ def fetch_recent_alerts(limit: int = 6) -> dict:
     }
 
 
+def fetch_events(limit: int = 100) -> dict:
+    connection = open_readonly_connection()
+    if connection is None or not table_exists(connection, "kiln_events"):
+        if connection is not None:
+            connection.close()
+        return {"events": []}
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT id, timestamp_utc, event_type, label, detail
+            FROM kiln_events
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return {
+        "events": [
+            {
+                "id": row["id"],
+                "timestamp_utc": row["timestamp_utc"],
+                "event_type": row["event_type"],
+                "label": row["label"],
+                "detail": row["detail"],
+                "sample_age": format_sample_age(row["timestamp_utc"]),
+            }
+            for row in rows
+        ]
+    }
+
+
+def fetch_faults(window_name: str = "24h", limit: int = 100) -> dict:
+    if window_name not in HISTORY_WINDOWS:
+        window_name = "24h"
+
+    connection = open_readonly_connection()
+    if connection is None:
+        return {"range": window_name, "faults": [], "diagnostics": None}
+
+    cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
+    try:
+        rows = connection.execute(
+            """
+            SELECT id, timestamp_utc, temp_c, temp_f, detail
+            FROM temperature_log
+            WHERE status = 'ERROR'
+              AND timestamp_utc >= ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (cutoff, limit),
+        ).fetchall()
+        diagnostics = build_fault_diagnostics(connection, cutoff)
+    finally:
+        connection.close()
+
+    return {
+        "range": window_name,
+        "faults": [
+            {
+                "id": row["id"],
+                "timestamp_utc": row["timestamp_utc"],
+                "temp_c": row["temp_c"],
+                "temp_f": row["temp_f"],
+                "detail": row["detail"],
+                "sample_age": format_sample_age(row["timestamp_utc"]),
+            }
+            for row in rows
+        ],
+        "diagnostics": diagnostics,
+    }
+
+
 def fetch_alert_channel_status() -> dict:
     configured_channels = {
         notifier.channel_name: True
@@ -5634,6 +6312,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_text_response(ALERTS_PAGE_HTML, content_type="text/html; charset=utf-8")
             return
 
+        if parsed_path.path == "/events":
+            self.send_text_response(EVENTS_PAGE_HTML, content_type="text/html; charset=utf-8")
+            return
+
+        if parsed_path.path == "/faults":
+            self.send_text_response(FAULTS_PAGE_HTML, content_type="text/html; charset=utf-8")
+            return
+
         if parsed_path.path == "/camera/latest.jpg":
             latest_path = CAMERA_SNAPSHOTS_DIR / "latest.jpg"
             if not latest_path.exists():
@@ -5695,6 +6381,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/api/recent-alerts":
             self.send_json_response(fetch_recent_alerts())
+            return
+
+        if parsed_path.path == "/api/events":
+            query = parse_qs(parsed_path.query)
+            limit = int(query.get("limit", ["100"])[0])
+            self.send_json_response(fetch_events(limit=max(1, min(limit, 500))))
+            return
+
+        if parsed_path.path == "/api/faults":
+            query = parse_qs(parsed_path.query)
+            range_name = query.get("range", ["24h"])[0]
+            limit = int(query.get("limit", ["100"])[0])
+            self.send_json_response(fetch_faults(range_name, limit=max(1, min(limit, 500))))
             return
 
         if parsed_path.path == "/api/alert-channels":
