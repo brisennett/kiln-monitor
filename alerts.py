@@ -12,6 +12,7 @@ RULE_TYPES = {
     "TARGET_REACHED",
     "ABOVE_HIGH",
     "BELOW_LOW",
+    "TIME_ELAPSED",
 }
 
 SEVERITY_ORDER = {
@@ -42,6 +43,7 @@ class AlertRule:
     enabled: bool
     rule_type: str
     threshold_f: float
+    trigger_minutes: float | None
     severity: str
     hysteresis_f: float
     notify_cooldown_minutes: float
@@ -51,6 +53,7 @@ class AlertRule:
     notify_push: bool = False
     active: bool = False
     last_triggered_at: str | None = None
+    last_triggered_context: str | None = None
 
 
 def validate_rule(rule: AlertRule) -> None:
@@ -66,15 +69,19 @@ def validate_rule(rule: AlertRule) -> None:
         raise ValueError("alert cooldown must be zero or greater")
     if not HEX_COLOR_PATTERN.match(rule.color_hex):
         raise ValueError("alert color must be a hex value like #FF6600")
+    if rule.rule_type == "TIME_ELAPSED":
+        if rule.trigger_minutes is None or rule.trigger_minutes <= 0:
+            raise ValueError("time-based alerts require trigger_minutes greater than zero")
+    elif rule.trigger_minutes is not None and rule.trigger_minutes < 0:
+        raise ValueError("trigger_minutes must be zero or greater")
 
 
 def evaluate_alert_rules(
     sample: TemperatureSample,
     rules: list[AlertRule],
+    elapsed_minutes: float | None = None,
+    alert_context_key: str | None = None,
 ) -> tuple[list[AlertEvent], list[AlertRule]]:
-    if sample.status != "OK" or sample.temp_f is None or sample.temp_c is None:
-        return [], rules
-
     events: list[AlertEvent] = []
     updated_rules: list[AlertRule] = []
 
@@ -84,7 +91,17 @@ def evaluate_alert_rules(
             updated_rules.append(replace(rule, active=False))
             continue
 
-        if rule.rule_type == "TARGET_REACHED":
+        if rule.rule_type == "TIME_ELAPSED":
+            next_rule, next_events = evaluate_time_elapsed_rule(
+                sample,
+                rule,
+                elapsed_minutes=elapsed_minutes,
+                alert_context_key=alert_context_key,
+            )
+        elif sample.status != "OK" or sample.temp_f is None or sample.temp_c is None:
+            updated_rules.append(rule)
+            continue
+        elif rule.rule_type == "TARGET_REACHED":
             next_rule, next_events = evaluate_target_rule(sample, rule)
         elif rule.rule_type == "ABOVE_HIGH":
             next_rule, next_events = evaluate_above_high_rule(sample, rule)
@@ -211,3 +228,42 @@ def evaluate_below_low_rule(
         ]
 
     return rule, []
+
+
+def evaluate_time_elapsed_rule(
+    sample: TemperatureSample,
+    rule: AlertRule,
+    *,
+    elapsed_minutes: float | None,
+    alert_context_key: str | None,
+) -> tuple[AlertRule, list[AlertEvent]]:
+    if elapsed_minutes is None or alert_context_key is None or rule.trigger_minutes is None:
+        return replace(rule, active=False), []
+
+    if rule.last_triggered_context != alert_context_key and elapsed_minutes < rule.trigger_minutes:
+        return replace(rule, active=False), []
+
+    if rule.last_triggered_context == alert_context_key:
+        return replace(rule, active=True), []
+
+    if elapsed_minutes >= rule.trigger_minutes:
+        fired_rule = replace(
+            rule,
+            active=True,
+            last_triggered_at=sample.timestamp.isoformat(),
+            last_triggered_context=alert_context_key,
+        )
+        return fired_rule, [
+            AlertEvent(
+                timestamp_utc=sample.timestamp.isoformat(),
+                level=rule.severity,
+                kind="TIME_ELAPSED_TRIGGER",
+                detail=f"{rule.name} triggered at {elapsed_minutes:.1f} minutes elapsed",
+                temp_c=sample.temp_c,
+                temp_f=sample.temp_f,
+                rule_id=rule.id,
+                rule_name=rule.name,
+            )
+        ]
+
+    return replace(rule, active=False), []

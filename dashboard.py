@@ -474,6 +474,9 @@ PAGE_HTML = """<!doctype html>
       gap: 16px;
       align-items: start;
     }
+    #cameraPreviewWrap {
+      position: relative;
+    }
     .camera-preview {
       width: 100%;
       aspect-ratio: 4 / 3;
@@ -494,6 +497,19 @@ PAGE_HTML = """<!doctype html>
       text-align: center;
       padding: 16px;
     }
+    .camera-timestamp {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.82);
+      color: #f8fafc;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(4px);
+    }
     .camera-meta {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -511,6 +527,76 @@ PAGE_HTML = """<!doctype html>
       gap: 10px;
       flex-wrap: wrap;
       margin-top: 12px;
+    }
+    .ops-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    }
+    .ops-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .ops-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .ops-item {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .ops-item-top {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .ops-item-label {
+      font-weight: 700;
+    }
+    .ops-item-time {
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+    .ops-item-detail {
+      color: #cbd5e1;
+      font-size: 0.92rem;
+    }
+    .event-form-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    .diagnostics-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 14px;
+    }
+    .diagnostic-card {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .diagnostic-card .value {
+      font-size: 1.05rem;
+    }
+    .event-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: #bae6fd;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.78rem;
+      font-weight: 700;
     }
     label {
       display: block;
@@ -608,6 +694,9 @@ PAGE_HTML = """<!doctype html>
       .camera-shell {
         grid-template-columns: 1fr;
       }
+      .ops-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -690,6 +779,49 @@ PAGE_HTML = """<!doctype html>
           <div class="subtle">Red dots mark fault samples. Gaps show periods where no valid temperature was logged.</div>
         </section>
 
+        <section class="ops-grid">
+          <section class="ops-card">
+            <div class="label">Event Markers</div>
+            <div class="subtle">Add manual run notes so we can line up wiring, power, and kiln changes with the fault timeline.</div>
+            <form id="eventForm">
+              <div class="event-form-grid">
+                <div>
+                  <label for="eventType">Event Type</label>
+                  <select id="eventType" name="event_type">
+                    <option value="OPERATION">Operation</option>
+                    <option value="POWER">Power</option>
+                    <option value="OBSERVATION">Observation</option>
+                    <option value="NOTE">Note</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="eventLabel">Label</label>
+                  <input id="eventLabel" name="label" placeholder="Turned third coil on" required />
+                </div>
+                <div style="grid-column: 1 / -1;">
+                  <label for="eventDetail">Detail</label>
+                  <input id="eventDetail" name="detail" placeholder="Optional extra note" />
+                </div>
+              </div>
+              <div class="rule-actions">
+                <button type="submit">Add Marker</button>
+              </div>
+              <div id="eventStatus" class="success-text"></div>
+            </form>
+            <div id="eventList" class="ops-list">
+              <div class="subtle">Loading event markers...</div>
+            </div>
+          </section>
+
+          <section class="ops-card">
+            <div class="label">Fault Diagnostics</div>
+            <div class="subtle">Windowed fault counts and streaks based on the currently selected chart range.</div>
+            <div id="diagnosticsGrid" class="diagnostics-grid">
+              <div class="diagnostic-card"><div class="label">Loading</div><div class="value">--</div></div>
+            </div>
+          </section>
+        </section>
+
         <section>
           <div class="zone-label">Below Chart</div>
           <div class="layout-zone layout-zone-cards" id="belowChartZone" data-zone-id="below-chart"></div>
@@ -723,6 +855,7 @@ PAGE_HTML = """<!doctype html>
                     <option value="TARGET_REACHED">Target Reached</option>
                     <option value="ABOVE_HIGH">Above High</option>
                     <option value="BELOW_LOW">Below Low</option>
+                    <option value="TIME_ELAPSED">Time Elapsed</option>
                   </select>
                 </div>
                 <div>
@@ -1090,6 +1223,7 @@ PAGE_HTML = """<!doctype html>
             <div id="cameraPreviewWrap">
               <div id="cameraEmptyState" class="camera-empty">No snapshot captured yet.</div>
               <img id="cameraPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
+              <div id="cameraTimestampBadge" class="camera-timestamp" hidden>--</div>
             </div>
 
             <div>
@@ -1211,11 +1345,16 @@ PAGE_HTML = """<!doctype html>
     const activeProfileElapsed = document.getElementById("activeProfileElapsed");
     const cameraPreview = document.getElementById("cameraPreview");
     const cameraEmptyState = document.getElementById("cameraEmptyState");
+    const cameraTimestampBadge = document.getElementById("cameraTimestampBadge");
     const cameraCapturedAt = document.getElementById("cameraCapturedAt");
     const cameraImageStatus = document.getElementById("cameraImageStatus");
     const cameraStatusMessage = document.getElementById("cameraStatusMessage");
     const captureSnapshotButton = document.getElementById("captureSnapshotButton");
     const refreshSnapshotButton = document.getElementById("refreshSnapshotButton");
+    const eventForm = document.getElementById("eventForm");
+    const eventStatus = document.getElementById("eventStatus");
+    const eventList = document.getElementById("eventList");
+    const diagnosticsGrid = document.getElementById("diagnosticsGrid");
     const topSummaryZone = document.getElementById("topSummaryZone");
     const belowChartZone = document.getElementById("belowChartZone");
     const layoutZones = [topSummaryZone, belowChartZone];
@@ -1254,10 +1393,12 @@ PAGE_HTML = """<!doctype html>
     let editingProfileId = null;
     let editingProfileSegments = [];
     let currentCameraStatus = null;
+    let currentEvents = [];
     let chartState = {
       points: [],
       plotPoints: [],
       overlayPoints: [],
+      events: [],
     };
 
     function setActiveAlertTab(tabName) {
@@ -1378,6 +1519,18 @@ PAGE_HTML = """<!doctype html>
       return new Date(isoText).toLocaleString();
     }
 
+    function formatCompactTimestamp(isoText) {
+      if (!isoText) {
+        return "--";
+      }
+      return new Date(isoText).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        month: "short",
+        day: "numeric",
+      });
+    }
+
     function humanizeRuleType(ruleType) {
       if (ruleType === "TARGET_REACHED") {
         return "Target";
@@ -1387,6 +1540,9 @@ PAGE_HTML = """<!doctype html>
       }
       if (ruleType === "BELOW_LOW") {
         return "Low";
+      }
+      if (ruleType === "TIME_ELAPSED") {
+        return "Elapsed";
       }
       return ruleType;
     }
@@ -1456,9 +1612,19 @@ PAGE_HTML = """<!doctype html>
     }
 
     function updateRuleUnitLabels() {
+      const ruleType = document.getElementById("ruleType").value;
       const suffix = unitSuffix();
-      ruleThresholdLabel.textContent = `Threshold ${suffix}`;
-      ruleHysteresisLabel.textContent = `Reset Gap ${suffix}`;
+      const hysteresisInput = document.getElementById("ruleHysteresis");
+      if (ruleType === "TIME_ELAPSED") {
+        ruleThresholdLabel.textContent = "Elapsed Minutes";
+        ruleHysteresisLabel.textContent = "Reset Gap";
+        hysteresisInput.disabled = true;
+        hysteresisInput.value = "0";
+      } else {
+        ruleThresholdLabel.textContent = `Threshold ${suffix}`;
+        ruleHysteresisLabel.textContent = `Reset Gap ${suffix}`;
+        hysteresisInput.disabled = false;
+      }
     }
 
     function formatDuration(seconds) {
@@ -1551,6 +1717,7 @@ PAGE_HTML = """<!doctype html>
     function resetRuleForm() {
       editingRuleId = null;
       ruleForm.reset();
+      document.getElementById("ruleType").value = "TARGET_REACHED";
       document.getElementById("ruleSeverity").value = "WARNING";
       document.getElementById("ruleEnabled").value = "true";
       document.getElementById("ruleHysteresis").value = "5";
@@ -1562,6 +1729,61 @@ PAGE_HTML = """<!doctype html>
       ruleSubmit.textContent = "Add Rule";
       ruleError.textContent = "";
       updateRuleUnitLabels();
+    }
+
+    function renderEventList(events) {
+      currentEvents = events || [];
+      if (!currentEvents.length) {
+        eventList.innerHTML = '<div class="subtle">No event markers in this window yet.</div>';
+        return;
+      }
+
+      eventList.innerHTML = "";
+      currentEvents.forEach((event) => {
+        const row = document.createElement("div");
+        row.className = "ops-item";
+        row.innerHTML = `
+          <div class="ops-item-top">
+            <div class="ops-item-label">${event.label}</div>
+            <div class="ops-item-time">${formatTimestamp(event.timestamp_utc)}</div>
+          </div>
+          <div class="ops-item-detail"><span class="event-badge">${event.event_type}</span> ${event.detail || ""}</div>
+        `;
+        eventList.appendChild(row);
+      });
+    }
+
+    function renderDiagnostics(diagnostics) {
+      if (!diagnostics) {
+        diagnosticsGrid.innerHTML = '<div class="diagnostic-card"><div class="label">No data</div><div class="value">--</div></div>';
+        return;
+      }
+
+      const detailText = (diagnostics.top_fault_details || []).length
+        ? diagnostics.top_fault_details.map((item) => `${item.detail} (${item.count})`).join(", ")
+        : "none";
+      diagnosticsGrid.innerHTML = `
+        <div class="diagnostic-card">
+          <div class="label">Fault Samples</div>
+          <div class="value">${Number(diagnostics.fault_samples || 0).toLocaleString()}</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Fault Rate</div>
+          <div class="value">${Number(diagnostics.fault_rate_percent || 0).toFixed(1)}%</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Longest Streak</div>
+          <div class="value">${Number(diagnostics.longest_fault_streak || 0)} samples</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Current Streak</div>
+          <div class="value">${Number(diagnostics.current_fault_streak || 0)} samples</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Top Faults</div>
+          <div class="value">${detailText}</div>
+        </div>
+      `;
     }
 
     function hexToSoftRgba(hexColor, alpha) {
@@ -1925,7 +2147,7 @@ PAGE_HTML = """<!doctype html>
       ctx.fillText(formatTimestamp(nearest.timestamp_utc), boxX + 12, boxY + 42);
     }
 
-    function drawChart(points, overlayPoints = []) {
+    function drawChart(points, overlayPoints = [], events = []) {
       const displayPoints = smoothingEnabled
         ? smoothPoints(points, 12)
         : points;
@@ -1946,6 +2168,7 @@ PAGE_HTML = """<!doctype html>
         points,
         plotPoints: [],
         overlayPoints,
+        events,
         top,
         plotHeight,
       };
@@ -2066,6 +2289,26 @@ PAGE_HTML = """<!doctype html>
           }
         });
         ctx.stroke();
+        ctx.restore();
+      }
+
+      if (events.length) {
+        ctx.save();
+        events.forEach((event) => {
+          const x = xFor(new Date(event.timestamp_utc).getTime());
+          ctx.strokeStyle = "rgba(250, 204, 21, 0.78)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+          ctx.beginPath();
+          ctx.moveTo(x, top);
+          ctx.lineTo(x, top + plotHeight);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#facc15";
+          ctx.beginPath();
+          ctx.arc(x, top + 10, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
         ctx.restore();
       }
 
@@ -2242,6 +2485,7 @@ PAGE_HTML = """<!doctype html>
         cameraPreview.hidden = true;
         cameraPreview.removeAttribute("src");
         cameraEmptyState.hidden = false;
+        cameraTimestampBadge.hidden = true;
         cameraCapturedAt.textContent = "--";
         cameraImageStatus.textContent = payload?.error || "No image yet";
         return;
@@ -2250,6 +2494,8 @@ PAGE_HTML = """<!doctype html>
       cameraPreview.src = payload.latest_url;
       cameraPreview.hidden = false;
       cameraEmptyState.hidden = true;
+      cameraTimestampBadge.hidden = false;
+      cameraTimestampBadge.textContent = formatCompactTimestamp(payload.captured_at);
       cameraCapturedAt.textContent = formatTimestamp(payload.captured_at);
       cameraImageStatus.textContent = payload.archived_filename || "latest.jpg";
     }
@@ -2294,7 +2540,7 @@ PAGE_HTML = """<!doctype html>
         row.innerHTML = `
           <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
-          <td>${formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
+          <td>${rule.rule_type === "TIME_ELAPSED" ? `${Number(rule.trigger_minutes || 0).toFixed(1)} min` : formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
           <td>${rule.severity}</td>
           <td>
             <span class="pill ${rule.enabled ? "pill-on" : "pill-off"}">${rule.enabled ? "Enabled" : "Disabled"}</span>
@@ -2303,6 +2549,7 @@ PAGE_HTML = """<!doctype html>
           <td>${formatTimestamp(rule.last_triggered_at)}</td>
           <td>
             <button type="button" data-edit="${rule.id}">Edit</button>
+            <button type="button" data-clone="${rule.id}">Clone</button>
             <button type="button" data-delete="${rule.id}">Delete</button>
           </td>
         `;
@@ -2318,9 +2565,13 @@ PAGE_HTML = """<!doctype html>
           editingRuleId = rule.id;
           document.getElementById("ruleName").value = rule.name;
           document.getElementById("ruleType").value = rule.rule_type;
-          document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
+          document.getElementById("ruleThreshold").value = rule.rule_type === "TIME_ELAPSED"
+            ? Number(rule.trigger_minutes || 0).toFixed(1)
+            : convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
           document.getElementById("ruleSeverity").value = rule.severity;
-          document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+          document.getElementById("ruleHysteresis").value = rule.rule_type === "TIME_ELAPSED"
+            ? "0"
+            : convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
           document.getElementById("ruleCooldown").value = Number(rule.notify_cooldown_minutes ?? 15).toFixed(1);
           document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
           document.getElementById("ruleColor").value = rule.color_hex;
@@ -2329,6 +2580,19 @@ PAGE_HTML = """<!doctype html>
           document.getElementById("ruleNotifyPush").value = rule.notify_push ? "true" : "false";
           ruleSubmit.textContent = "Save Rule";
           ruleError.textContent = "";
+          updateRuleUnitLabels();
+        });
+      });
+
+      rulesTableBody.querySelectorAll("[data-clone]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const response = await fetch(`/api/alert-rules/${button.dataset.clone}/clone`, { method: "POST" });
+          const result = await response.json();
+          if (!response.ok) {
+            ruleError.textContent = result.error || "Failed to clone alert rule.";
+            return;
+          }
+          await refreshAlertRules();
         });
       });
 
@@ -2451,7 +2715,9 @@ PAGE_HTML = """<!doctype html>
       const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
       const response = await fetch(`/api/history?${params.toString()}`);
       const payload = await response.json();
-      drawChart(payload.samples, payload.profile_overlay || []);
+      drawChart(payload.samples, payload.profile_overlay || [], payload.events || []);
+      renderEventList(payload.events || []);
+      renderDiagnostics(payload.diagnostics || null);
       if (payload.meta) {
         const resolutionLabel = payload.meta.bucket_seconds >= 3600
           ? `${Math.round(payload.meta.bucket_seconds / 3600)}h`
@@ -2495,7 +2761,7 @@ PAGE_HTML = """<!doctype html>
       smoothingEnabled = !smoothingEnabled;
       event.target.classList.toggle("active", smoothingEnabled);
       event.target.textContent = smoothingEnabled ? "Smooth" : "Raw";
-      drawChart(chartState.points, chartState.overlayPoints || []);
+      drawChart(chartState.points, chartState.overlayPoints || [], chartState.events || []);
     });
 
     resolutionSelect.addEventListener("change", async () => {
@@ -2535,8 +2801,13 @@ PAGE_HTML = """<!doctype html>
       if (editingRuleId !== null) {
         const rule = currentRules.find((item) => item.id === editingRuleId);
         if (rule) {
-          document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
-          document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+          if (rule.rule_type === "TIME_ELAPSED") {
+            document.getElementById("ruleThreshold").value = Number(rule.trigger_minutes || 0).toFixed(1);
+            document.getElementById("ruleHysteresis").value = "0";
+          } else {
+            document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
+            document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+          }
         }
       }
       await saveDisplayUnit();
@@ -2597,12 +2868,14 @@ PAGE_HTML = """<!doctype html>
     ruleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       ruleError.textContent = "";
+      const ruleType = document.getElementById("ruleType").value;
       const payload = {
         name: document.getElementById("ruleName").value.trim(),
-        rule_type: document.getElementById("ruleType").value,
-        threshold_f: convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
+        rule_type: ruleType,
+        threshold_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
+        trigger_minutes: ruleType === "TIME_ELAPSED" ? Number(document.getElementById("ruleThreshold").value) : null,
         severity: document.getElementById("ruleSeverity").value,
-        hysteresis_f: convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
+        hysteresis_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
         notify_cooldown_minutes: Number(document.getElementById("ruleCooldown").value),
         enabled: document.getElementById("ruleEnabled").value === "true",
         color_hex: document.getElementById("ruleColor").value,
@@ -2632,6 +2905,33 @@ PAGE_HTML = """<!doctype html>
 
     ruleCancel.addEventListener("click", () => {
       resetRuleForm();
+    });
+
+    document.getElementById("ruleType").addEventListener("change", () => {
+      updateRuleUnitLabels();
+    });
+
+    eventForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      eventStatus.textContent = "Saving marker...";
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_type: document.getElementById("eventType").value,
+          label: document.getElementById("eventLabel").value.trim(),
+          detail: document.getElementById("eventDetail").value.trim(),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        eventStatus.textContent = result.error || "Failed to add event marker.";
+        return;
+      }
+      eventForm.reset();
+      document.getElementById("eventType").value = "OPERATION";
+      eventStatus.textContent = "Event marker added.";
+      await refreshHistory();
     });
 
     profileForm.addEventListener("submit", async (event) => {
@@ -2694,12 +2994,12 @@ PAGE_HTML = """<!doctype html>
 
     canvas.addEventListener("mousemove", (event) => {
       hoverX = event.clientX - canvas.getBoundingClientRect().left;
-      drawChart(chartState.points, chartState.overlayPoints || []);
+      drawChart(chartState.points, chartState.overlayPoints || [], chartState.events || []);
     });
 
     canvas.addEventListener("mouseleave", () => {
       hoverX = null;
-      drawChart(chartState.points, chartState.overlayPoints || []);
+      drawChart(chartState.points, chartState.overlayPoints || [], chartState.events || []);
     });
 
     setupCardDragAndDrop();
@@ -2773,16 +3073,22 @@ def open_readwrite_connection() -> sqlite3.Connection:
             enabled INTEGER NOT NULL DEFAULT 1,
             rule_type TEXT NOT NULL,
             threshold_f REAL NOT NULL,
+            trigger_minutes REAL,
             severity TEXT NOT NULL,
             hysteresis_f REAL NOT NULL DEFAULT 5.0,
             notify_cooldown_minutes REAL NOT NULL DEFAULT 15.0,
             active INTEGER NOT NULL DEFAULT 0,
-            last_triggered_at TEXT
+            last_triggered_at TEXT,
+            last_triggered_context TEXT
         )
         """
     )
     columns = connection.execute("PRAGMA table_info(alert_rules)").fetchall()
     existing_names = {column["name"] for column in columns}
+    if "trigger_minutes" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN trigger_minutes REAL"
+        )
     if "color_hex" not in existing_names:
         connection.execute(
             "ALTER TABLE alert_rules ADD COLUMN color_hex TEXT NOT NULL DEFAULT '#38bdf8'"
@@ -2803,6 +3109,10 @@ def open_readwrite_connection() -> sqlite3.Connection:
         connection.execute(
             "ALTER TABLE alert_rules ADD COLUMN notify_cooldown_minutes REAL NOT NULL DEFAULT 15.0"
         )
+    if "last_triggered_context" not in existing_names:
+        connection.execute(
+            "ALTER TABLE alert_rules ADD COLUMN last_triggered_context TEXT"
+        )
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS dashboard_state (
@@ -2822,6 +3132,23 @@ def open_readwrite_connection() -> sqlite3.Connection:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS kiln_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            label TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_kiln_events_timestamp_utc
+        ON kiln_events(timestamp_utc)
         """
     )
     connection.commit()
@@ -3277,6 +3604,107 @@ def capture_camera_snapshot() -> dict:
     }
 
 
+def fetch_window_events(connection: sqlite3.Connection, cutoff: str) -> list[dict]:
+    if not table_exists(connection, "kiln_events"):
+        return []
+
+    rows = connection.execute(
+        """
+        SELECT id, timestamp_utc, event_type, label, detail
+        FROM kiln_events
+        WHERE timestamp_utc >= ?
+        ORDER BY timestamp_utc DESC, id DESC
+        LIMIT 50
+        """,
+        (cutoff,),
+    ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "timestamp_utc": row["timestamp_utc"],
+            "event_type": row["event_type"],
+            "label": row["label"],
+            "detail": row["detail"],
+        }
+        for row in rows
+    ]
+
+
+def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str) -> dict:
+    totals = connection.execute(
+        """
+        SELECT
+            COUNT(*) AS total_samples,
+            SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END) AS fault_samples,
+            SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) AS ok_samples
+        FROM temperature_log
+        WHERE timestamp_utc >= ?
+        """,
+        (cutoff,),
+    ).fetchone()
+
+    streak_rows = connection.execute(
+        """
+        SELECT status
+        FROM temperature_log
+        WHERE timestamp_utc >= ?
+        ORDER BY id ASC
+        """,
+        (cutoff,),
+    ).fetchall()
+    longest_fault_streak = 0
+    running_streak = 0
+    for row in streak_rows:
+        if row["status"] == "ERROR":
+            running_streak += 1
+            longest_fault_streak = max(longest_fault_streak, running_streak)
+        else:
+            running_streak = 0
+
+    current_fault_streak = 0
+    current_rows = connection.execute(
+        """
+        SELECT status
+        FROM temperature_log
+        ORDER BY id DESC
+        LIMIT 250
+        """
+    ).fetchall()
+    for row in current_rows:
+        if row["status"] == "ERROR":
+            current_fault_streak += 1
+        else:
+            break
+
+    detail_rows = connection.execute(
+        """
+        SELECT detail, COUNT(*) AS count
+        FROM temperature_log
+        WHERE timestamp_utc >= ?
+          AND status = 'ERROR'
+        GROUP BY detail
+        ORDER BY count DESC, detail ASC
+        LIMIT 3
+        """,
+        (cutoff,),
+    ).fetchall()
+
+    total_samples = int(totals["total_samples"] or 0)
+    fault_samples = int(totals["fault_samples"] or 0)
+    return {
+        "total_samples": total_samples,
+        "fault_samples": fault_samples,
+        "ok_samples": int(totals["ok_samples"] or 0),
+        "fault_rate_percent": (fault_samples / total_samples * 100.0) if total_samples else 0.0,
+        "longest_fault_streak": longest_fault_streak,
+        "current_fault_streak": current_fault_streak,
+        "top_fault_details": [
+            {"detail": row["detail"] or "fault", "count": int(row["count"])}
+            for row in detail_rows
+        ],
+    }
+
+
 def create_profile(payload: dict) -> dict:
     profile = parse_profile_payload(payload)
     now = datetime.now(timezone.utc).isoformat()
@@ -3460,6 +3888,8 @@ def fetch_history(window_name: str) -> dict:
             (cutoff, bucket_seconds),
         ).fetchall()
         active_run = fetch_active_profile_run(connection)
+        events = fetch_window_events(connection, cutoff)
+        diagnostics = build_fault_diagnostics(connection, cutoff)
     finally:
         connection.close()
 
@@ -3495,6 +3925,8 @@ def fetch_history(window_name: str) -> dict:
         "range": window_name,
         "samples": [row_to_payload(row) for row in rows],
         "profile_overlay": profile_overlay,
+        "events": events,
+        "diagnostics": diagnostics,
         "meta": {
             "bucket_seconds": bucket_seconds,
             "returned_samples": len(rows),
@@ -3562,6 +3994,8 @@ def fetch_history_with_resolution(window_name: str, resolution_name: str) -> dic
             (cutoff, bucket_seconds),
         ).fetchall()
         active_run = fetch_active_profile_run(connection)
+        events = fetch_window_events(connection, cutoff)
+        diagnostics = build_fault_diagnostics(connection, cutoff)
     finally:
         connection.close()
 
@@ -3597,6 +4031,8 @@ def fetch_history_with_resolution(window_name: str, resolution_name: str) -> dic
         "range": window_name,
         "samples": [row_to_payload(row) for row in rows],
         "profile_overlay": profile_overlay,
+        "events": events,
+        "diagnostics": diagnostics,
         "meta": {
             "bucket_seconds": bucket_seconds,
             "returned_samples": len(rows),
@@ -3616,10 +4052,10 @@ def fetch_alert_rules() -> dict:
         return {"rules": []}
 
     try:
-        select_fields = "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, active, last_triggered_at"
+        select_fields = "id, name, enabled, rule_type, threshold_f, trigger_minutes, severity, hysteresis_f, active, last_triggered_at"
         if table_has_column(connection, "alert_rules", "color_hex"):
             select_fields = (
-                "id, name, enabled, rule_type, threshold_f, severity, hysteresis_f, "
+                "id, name, enabled, rule_type, threshold_f, trigger_minutes, severity, hysteresis_f, "
                 "color_hex, notify_email, notify_sms, notify_push, active, last_triggered_at"
             )
         rows = connection.execute(
@@ -3640,6 +4076,7 @@ def fetch_alert_rules() -> dict:
                 "enabled": bool(row["enabled"]),
                 "rule_type": row["rule_type"],
                 "threshold_f": row["threshold_f"],
+                "trigger_minutes": row["trigger_minutes"] if "trigger_minutes" in row.keys() else None,
                 "severity": row["severity"],
                 "hysteresis_f": row["hysteresis_f"],
                 "notify_cooldown_minutes": row["notify_cooldown_minutes"] if "notify_cooldown_minutes" in row.keys() else 15.0,
@@ -3751,6 +4188,7 @@ def send_test_alert(payload: dict) -> dict:
         enabled=True,
         rule_type="TARGET_REACHED",
         threshold_f=0.0,
+        trigger_minutes=None,
         severity="INFO",
         hysteresis_f=0.0,
         notify_cooldown_minutes=0.0,
@@ -3760,6 +4198,7 @@ def send_test_alert(payload: dict) -> dict:
         notify_push="PUSH" in normalized_channels,
         active=False,
         last_triggered_at=None,
+        last_triggered_context=None,
     )
     notifiers = {
         notifier.channel_name: notifier
@@ -3804,12 +4243,15 @@ def send_test_alert(payload: dict) -> dict:
 
 
 def parse_alert_rule_payload(payload: dict) -> AlertRule:
+    rule_type = str(payload.get("rule_type", "")).strip().upper()
+    trigger_minutes = payload.get("trigger_minutes")
     rule = AlertRule(
         id=None,
         name=str(payload.get("name", "")).strip(),
         enabled=bool(payload.get("enabled", True)),
-        rule_type=str(payload.get("rule_type", "")).strip().upper(),
+        rule_type=rule_type,
         threshold_f=float(payload.get("threshold_f")),
+        trigger_minutes=None if trigger_minutes in {None, ""} else float(trigger_minutes),
         severity=str(payload.get("severity", "")).strip().upper(),
         hysteresis_f=float(payload.get("hysteresis_f", 0.0)),
         notify_cooldown_minutes=float(payload.get("notify_cooldown_minutes", 15.0)),
@@ -3819,6 +4261,7 @@ def parse_alert_rule_payload(payload: dict) -> AlertRule:
         notify_push=bool(payload.get("notify_push", False)),
         active=False,
         last_triggered_at=None,
+        last_triggered_context=None,
     )
     validate_rule(rule)
     return rule
@@ -3835,6 +4278,7 @@ def create_alert_rule(payload: dict) -> dict:
                 enabled,
                 rule_type,
                 threshold_f,
+                trigger_minutes,
                 severity,
                 hysteresis_f,
                 notify_cooldown_minutes,
@@ -3843,14 +4287,16 @@ def create_alert_rule(payload: dict) -> dict:
                 notify_sms,
                 notify_push,
                 active,
-                last_triggered_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+                last_triggered_at,
+                last_triggered_context
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL)
             """,
             (
                 rule.name,
                 int(rule.enabled),
                 rule.rule_type,
                 rule.threshold_f,
+                rule.trigger_minutes,
                 rule.severity,
                 rule.hysteresis_f,
                 rule.notify_cooldown_minutes,
@@ -3884,7 +4330,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
         connection.execute(
             """
             UPDATE alert_rules
-            SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, severity = ?, hysteresis_f = ?, notify_cooldown_minutes = ?, color_hex = ?,
+            SET name = ?, enabled = ?, rule_type = ?, threshold_f = ?, trigger_minutes = ?, severity = ?, hysteresis_f = ?, notify_cooldown_minutes = ?, color_hex = ?,
                 notify_email = ?, notify_sms = ?, notify_push = ?,
                 active = CASE WHEN ? = 1 THEN active ELSE 0 END
             WHERE id = ?
@@ -3894,6 +4340,7 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
                 int(rule.enabled),
                 rule.rule_type,
                 rule.threshold_f,
+                rule.trigger_minutes,
                 rule.severity,
                 rule.hysteresis_f,
                 rule.notify_cooldown_minutes,
@@ -3904,6 +4351,100 @@ def update_alert_rule(rule_id: int, payload: dict) -> dict:
                 int(rule.enabled),
                 rule_id,
             ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
+def clone_alert_rule(rule_id: int) -> dict:
+    connection = open_readwrite_connection()
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                name,
+                enabled,
+                rule_type,
+                threshold_f,
+                trigger_minutes,
+                severity,
+                hysteresis_f,
+                notify_cooldown_minutes,
+                color_hex,
+                notify_email,
+                notify_sms,
+                notify_push
+            FROM alert_rules
+            WHERE id = ?
+            """,
+            (rule_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("alert rule not found")
+
+        connection.execute(
+            """
+            INSERT INTO alert_rules (
+                name,
+                enabled,
+                rule_type,
+                threshold_f,
+                trigger_minutes,
+                severity,
+                hysteresis_f,
+                notify_cooldown_minutes,
+                color_hex,
+                notify_email,
+                notify_sms,
+                notify_push,
+                active,
+                last_triggered_at,
+                last_triggered_context
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL)
+            """,
+            (
+                f"{row['name']} Copy",
+                int(bool(row["enabled"])),
+                row["rule_type"],
+                row["threshold_f"],
+                row["trigger_minutes"],
+                row["severity"],
+                row["hysteresis_f"],
+                row["notify_cooldown_minutes"],
+                row["color_hex"],
+                int(bool(row["notify_email"])),
+                int(bool(row["notify_sms"])),
+                int(bool(row["notify_push"])),
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True}
+
+
+def create_event_marker(payload: dict) -> dict:
+    label = str(payload.get("label", "")).strip()
+    detail = str(payload.get("detail", "")).strip()
+    event_type = str(payload.get("event_type", "NOTE")).strip().upper() or "NOTE"
+    if not label:
+        raise ValueError("event label is required")
+
+    connection = open_readwrite_connection()
+    try:
+        timestamp_utc = datetime.now(timezone.utc).isoformat()
+        connection.execute(
+            """
+            INSERT INTO kiln_events (
+                timestamp_utc,
+                event_type,
+                label,
+                detail
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (timestamp_utc, event_type, label, detail),
         )
         connection.commit()
     finally:
@@ -3974,6 +4515,7 @@ def alert_rule_row_to_payload(row: sqlite3.Row) -> dict:
         "enabled": bool(row["enabled"]),
         "rule_type": row["rule_type"],
         "threshold_f": row["threshold_f"],
+        "trigger_minutes": row["trigger_minutes"] if "trigger_minutes" in row.keys() else None,
         "severity": row["severity"],
         "hysteresis_f": row["hysteresis_f"],
         "notify_cooldown_minutes": row["notify_cooldown_minutes"] if "notify_cooldown_minutes" in row.keys() else 15.0,
@@ -4090,6 +4632,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(create_profile(payload))
                 return
 
+            if parsed_path.path == "/api/events":
+                self.send_json_response(create_event_marker(payload))
+                return
+
             if parsed_path.path == "/api/camera/capture":
                 self.send_json_response(capture_camera_snapshot())
                 return
@@ -4113,6 +4659,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             if parsed_path.path.startswith("/api/alert-rules/") and parsed_path.path.endswith("/delete"):
                 rule_id = int(parsed_path.path.split("/")[3])
                 self.send_json_response(delete_alert_rule(rule_id))
+                return
+
+            if parsed_path.path.startswith("/api/alert-rules/") and parsed_path.path.endswith("/clone"):
+                rule_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(clone_alert_rule(rule_id))
                 return
 
             if parsed_path.path.startswith("/api/profiles/") and parsed_path.path.endswith("/delete"):

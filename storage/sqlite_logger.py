@@ -101,6 +101,7 @@ class SQLiteLogger:
                 enabled INTEGER NOT NULL DEFAULT 1,
                 rule_type TEXT NOT NULL,
                 threshold_f REAL NOT NULL,
+                trigger_minutes REAL,
                 severity TEXT NOT NULL,
                 hysteresis_f REAL NOT NULL DEFAULT 5.0,
                 notify_cooldown_minutes REAL NOT NULL DEFAULT 15.0,
@@ -109,15 +110,35 @@ class SQLiteLogger:
                 notify_sms INTEGER NOT NULL DEFAULT 0,
                 notify_push INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 0,
-                last_triggered_at TEXT
+                last_triggered_at TEXT,
+                last_triggered_context TEXT
             )
             """
         )
+        self._ensure_column("alert_rules", "trigger_minutes", "REAL")
         self._ensure_column("alert_rules", "color_hex", "TEXT NOT NULL DEFAULT '#38bdf8'")
         self._ensure_column("alert_rules", "notify_cooldown_minutes", "REAL NOT NULL DEFAULT 15.0")
         self._ensure_column("alert_rules", "notify_email", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("alert_rules", "notify_sms", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column("alert_rules", "notify_push", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("alert_rules", "last_triggered_context", "TEXT")
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS kiln_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                label TEXT NOT NULL,
+                detail TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_kiln_events_timestamp_utc
+            ON kiln_events(timestamp_utc)
+            """
+        )
         self._connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled
@@ -185,6 +206,7 @@ class SQLiteLogger:
                 enabled,
                 rule_type,
                 threshold_f,
+                trigger_minutes,
                 severity,
                 hysteresis_f,
                 notify_cooldown_minutes,
@@ -193,7 +215,8 @@ class SQLiteLogger:
                 notify_sms,
                 notify_push,
                 active,
-                last_triggered_at
+                last_triggered_at,
+                last_triggered_context
             FROM alert_rules
             ORDER BY threshold_f ASC, id ASC
             """
@@ -205,15 +228,17 @@ class SQLiteLogger:
                 enabled=bool(row[2]),
                 rule_type=row[3],
                 threshold_f=row[4],
-                severity=row[5],
-                hysteresis_f=row[6],
-                notify_cooldown_minutes=row[7],
-                color_hex=row[8],
-                notify_email=bool(row[9]),
-                notify_sms=bool(row[10]),
-                notify_push=bool(row[11]),
-                active=bool(row[12]),
-                last_triggered_at=row[13],
+                trigger_minutes=row[5],
+                severity=row[6],
+                hysteresis_f=row[7],
+                notify_cooldown_minutes=row[8],
+                color_hex=row[9],
+                notify_email=bool(row[10]),
+                notify_sms=bool(row[11]),
+                notify_push=bool(row[12]),
+                active=bool(row[13]),
+                last_triggered_at=row[14],
+                last_triggered_context=row[15],
             )
             for row in rows
         ]
@@ -222,14 +247,36 @@ class SQLiteLogger:
         self._connection.execute(
             """
             UPDATE alert_rules
-            SET active = ?, last_triggered_at = ?
+            SET active = ?, last_triggered_at = ?, last_triggered_context = ?
             WHERE id = ?
             """,
             (
                 int(rule.active),
                 rule.last_triggered_at,
+                rule.last_triggered_context,
                 rule.id,
             ),
+        )
+        self._connection.commit()
+
+    def log_event(
+        self,
+        *,
+        timestamp_utc: str,
+        event_type: str,
+        label: str,
+        detail: str = "",
+    ) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO kiln_events (
+                timestamp_utc,
+                event_type,
+                label,
+                detail
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (timestamp_utc, event_type, label, detail),
         )
         self._connection.commit()
 

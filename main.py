@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import signal
+import sqlite3
 import sys
 import time
 from datetime import datetime, timezone
@@ -85,6 +87,7 @@ def build_watchdog_rule(rule_id: int, name: str, cooldown_minutes: float) -> Ale
         enabled=True,
         rule_type="TARGET_REACHED",
         threshold_f=0.0,
+        trigger_minutes=None,
         severity="CRITICAL",
         hysteresis_f=0.0,
         notify_cooldown_minutes=cooldown_minutes,
@@ -94,6 +97,7 @@ def build_watchdog_rule(rule_id: int, name: str, cooldown_minutes: float) -> Ale
         notify_push=True,
         active=False,
         last_triggered_at=None,
+        last_triggered_context=None,
     )
 
 
@@ -248,6 +252,58 @@ def reject_unrealistic_jump(sample: TemperatureSample, previous_temp_c: float | 
         )
 
 
+def load_alert_timing_context(
+    now: datetime,
+    monitor_started_at: datetime,
+) -> tuple[str, float]:
+    fallback_key = f"monitor:{monitor_started_at.isoformat()}"
+    fallback_elapsed = max((now - monitor_started_at).total_seconds() / 60.0, 0.0)
+
+    if not DATABASE_PATH.exists():
+        return fallback_key, fallback_elapsed
+
+    connection = sqlite3.connect(DATABASE_PATH)
+    try:
+        connection.row_factory = sqlite3.Row
+        table_row = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'dashboard_state'
+            """
+        ).fetchone()
+        if table_row is None:
+            return fallback_key, fallback_elapsed
+
+        row = connection.execute(
+            "SELECT value FROM dashboard_state WHERE key = ?",
+            ("active_profile_run",),
+        ).fetchone()
+        if row is None or not row["value"]:
+            return fallback_key, fallback_elapsed
+
+        payload = json.loads(row["value"])
+        if not isinstance(payload, dict):
+            return fallback_key, fallback_elapsed
+
+        started_at_text = payload.get("started_at")
+        profile_id = payload.get("profile_id")
+        if not started_at_text:
+            return fallback_key, fallback_elapsed
+
+        started_at = datetime.fromisoformat(str(started_at_text))
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+
+        context_key = f"profile:{profile_id}:{started_at.isoformat()}"
+        elapsed_minutes = max((now - started_at).total_seconds() / 60.0, 0.0)
+        return context_key, elapsed_minutes
+    except (sqlite3.Error, json.JSONDecodeError, TypeError, ValueError):
+        return fallback_key, fallback_elapsed
+    finally:
+        connection.close()
+
+
 def run_diagnostic(sample_count: int, sample_delay_seconds: float) -> int:
     print("Kiln Monitor Diagnostic")
     print(f"Sensor model: {SENSOR_MODEL}")
@@ -322,6 +378,7 @@ def run() -> int:
     success_count = 0
     error_streak = 0
     last_good_sample_at = datetime.now(timezone.utc)
+    monitor_started_at = datetime.now(timezone.utc)
     watchdog_fault_active = False
     watchdog_stale_active = False
 
@@ -371,7 +428,16 @@ def run() -> int:
                     cooldown_minutes=watchdog_settings["notify_cooldown_minutes"],
                 )
                 alert_rules = storage.fetch_alert_rules()
-                alerts, updated_rules = evaluate_alert_rules(sample, alert_rules)
+                alert_context_key, elapsed_minutes = load_alert_timing_context(
+                    sample.timestamp,
+                    monitor_started_at,
+                )
+                alerts, updated_rules = evaluate_alert_rules(
+                    sample,
+                    alert_rules,
+                    elapsed_minutes=elapsed_minutes,
+                    alert_context_key=alert_context_key,
+                )
                 attach_alert_snapshots(alerts, logger)
                 persist_alerts(storage, alerts, logger)
                 for original_rule, updated_rule in zip(alert_rules, updated_rules):
