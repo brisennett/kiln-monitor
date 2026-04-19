@@ -5,10 +5,11 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from alerts import AlertEvent, AlertRule, validate_rule
-from camera import CameraError, capture_snapshot, latest_snapshot_info
+from camera import CameraError, capture_snapshot, latest_snapshot_info, list_recent_snapshots
 from config import (
     CAMERA_SNAPSHOTS_DIR,
     DATABASE_PATH,
@@ -470,12 +471,23 @@ PAGE_HTML = """<!doctype html>
     }
     .camera-shell {
       display: grid;
-      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      grid-template-columns: minmax(320px, 1.1fr) minmax(260px, 0.9fr);
       gap: 16px;
       align-items: start;
     }
-    #cameraPreviewWrap {
+    .camera-preview-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .camera-preview-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.4);
+    }
+    .camera-preview-wrap {
       position: relative;
+      margin-top: 8px;
     }
     .camera-preview {
       width: 100%;
@@ -484,12 +496,13 @@ PAGE_HTML = """<!doctype html>
       border-radius: 14px;
       border: 1px solid var(--panel-border);
       background: #020617;
+      display: block;
     }
     .camera-empty {
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 240px;
+      min-height: 220px;
       border-radius: 14px;
       border: 1px dashed #334155;
       color: #94a3b8;
@@ -499,8 +512,8 @@ PAGE_HTML = """<!doctype html>
     }
     .camera-timestamp {
       position: absolute;
-      right: 12px;
-      bottom: 12px;
+      right: 10px;
+      bottom: 10px;
       padding: 8px 10px;
       border-radius: 10px;
       background: rgba(15, 23, 42, 0.82);
@@ -527,6 +540,41 @@ PAGE_HTML = """<!doctype html>
       gap: 10px;
       flex-wrap: wrap;
       margin-top: 12px;
+    }
+    .camera-archive {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.38);
+      padding: 10px;
+      max-height: 560px;
+      overflow-y: auto;
+    }
+    .camera-archive-list {
+      display: grid;
+      gap: 8px;
+    }
+    .camera-link {
+      width: 100%;
+      text-align: left;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #111827;
+      border: 1px solid #334155;
+    }
+    .camera-link.active {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      background: rgba(37, 99, 235, 0.22);
+    }
+    .camera-link-title {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .camera-link-meta {
+      display: block;
+      color: #9ca3af;
+      font-size: 0.85rem;
     }
     .ops-grid {
       display: grid;
@@ -1215,26 +1263,40 @@ PAGE_HTML = """<!doctype html>
           <div class="chart-top">
             <div>
               <div class="label">Camera</div>
-              <div class="subtle">Take a still snapshot from the kiln area and keep the latest image visible in the dashboard.</div>
+              <div class="subtle">Keep the newest capture fixed on top, and click any archived snapshot to inspect it below.</div>
             </div>
           </div>
 
           <div class="camera-shell">
-            <div id="cameraPreviewWrap">
-              <div id="cameraEmptyState" class="camera-empty">No snapshot captured yet.</div>
-              <img id="cameraPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
-              <div id="cameraTimestampBadge" class="camera-timestamp" hidden>--</div>
+            <div class="camera-preview-grid">
+              <div class="camera-preview-card">
+                <div class="label">Latest Snapshot</div>
+                <div class="camera-preview-wrap">
+                  <div id="cameraLatestEmptyState" class="camera-empty">No snapshot captured yet.</div>
+                  <img id="cameraLatestPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
+                  <div id="cameraLatestTimestampBadge" class="camera-timestamp" hidden>--</div>
+                </div>
+              </div>
+
+              <div class="camera-preview-card">
+                <div class="label">Selected Snapshot</div>
+                <div class="camera-preview-wrap">
+                  <div id="cameraSelectedEmptyState" class="camera-empty">Select a snapshot from the archive list.</div>
+                  <img id="cameraSelectedPreview" class="camera-preview" alt="Selected kiln camera snapshot" hidden />
+                  <div id="cameraSelectedTimestampBadge" class="camera-timestamp" hidden>--</div>
+                </div>
+              </div>
             </div>
 
             <div>
               <div class="camera-meta">
                 <div class="camera-meta-card">
                   <div class="label">Latest Capture</div>
-                  <div class="value" id="cameraCapturedAt">--</div>
+                  <div class="value" id="cameraLatestCapturedAt">--</div>
                 </div>
                 <div class="camera-meta-card">
-                  <div class="label">Image</div>
-                  <div class="value" id="cameraImageStatus">No image yet</div>
+                  <div class="label">Selected Capture</div>
+                  <div class="value" id="cameraSelectedCapturedAt">--</div>
                 </div>
               </div>
 
@@ -1243,6 +1305,14 @@ PAGE_HTML = """<!doctype html>
                 <button type="button" id="refreshSnapshotButton">Refresh Camera</button>
               </div>
               <div id="cameraStatusMessage" class="success-text"></div>
+
+              <div class="label" style="margin-top: 16px;">Recent Snapshots</div>
+              <div class="subtle">Showing the 20 most recent captures in your current time zone.</div>
+              <div class="camera-archive">
+                <div id="cameraArchiveList" class="camera-archive-list">
+                  <div class="subtle">Loading snapshots...</div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1343,11 +1413,15 @@ PAGE_HTML = """<!doctype html>
     const activeProfileSegment = document.getElementById("activeProfileSegment");
     const activeProfileExpectedTemp = document.getElementById("activeProfileExpectedTemp");
     const activeProfileElapsed = document.getElementById("activeProfileElapsed");
-    const cameraPreview = document.getElementById("cameraPreview");
-    const cameraEmptyState = document.getElementById("cameraEmptyState");
-    const cameraTimestampBadge = document.getElementById("cameraTimestampBadge");
-    const cameraCapturedAt = document.getElementById("cameraCapturedAt");
-    const cameraImageStatus = document.getElementById("cameraImageStatus");
+    const cameraLatestPreview = document.getElementById("cameraLatestPreview");
+    const cameraLatestEmptyState = document.getElementById("cameraLatestEmptyState");
+    const cameraLatestTimestampBadge = document.getElementById("cameraLatestTimestampBadge");
+    const cameraLatestCapturedAt = document.getElementById("cameraLatestCapturedAt");
+    const cameraSelectedPreview = document.getElementById("cameraSelectedPreview");
+    const cameraSelectedEmptyState = document.getElementById("cameraSelectedEmptyState");
+    const cameraSelectedTimestampBadge = document.getElementById("cameraSelectedTimestampBadge");
+    const cameraSelectedCapturedAt = document.getElementById("cameraSelectedCapturedAt");
+    const cameraArchiveList = document.getElementById("cameraArchiveList");
     const cameraStatusMessage = document.getElementById("cameraStatusMessage");
     const captureSnapshotButton = document.getElementById("captureSnapshotButton");
     const refreshSnapshotButton = document.getElementById("refreshSnapshotButton");
@@ -1393,6 +1467,7 @@ PAGE_HTML = """<!doctype html>
     let editingProfileId = null;
     let editingProfileSegments = [];
     let currentCameraStatus = null;
+    let selectedCameraSnapshot = null;
     let currentEvents = [];
     let chartState = {
       points: [],
@@ -2479,25 +2554,72 @@ PAGE_HTML = """<!doctype html>
       });
     }
 
-    function renderCameraStatus(payload) {
-      currentCameraStatus = payload || {};
-      if (!payload || !payload.available || !payload.latest_url) {
-        cameraPreview.hidden = true;
-        cameraPreview.removeAttribute("src");
-        cameraEmptyState.hidden = false;
-        cameraTimestampBadge.hidden = true;
-        cameraCapturedAt.textContent = "--";
-        cameraImageStatus.textContent = payload?.error || "No image yet";
+    function renderSnapshotPreview(imageEl, emptyEl, badgeEl, snapshot, fallbackText) {
+      if (!snapshot || !snapshot.url) {
+        imageEl.hidden = true;
+        imageEl.removeAttribute("src");
+        emptyEl.hidden = false;
+        emptyEl.textContent = fallbackText;
+        badgeEl.hidden = true;
         return;
       }
 
-      cameraPreview.src = payload.latest_url;
-      cameraPreview.hidden = false;
-      cameraEmptyState.hidden = true;
-      cameraTimestampBadge.hidden = false;
-      cameraTimestampBadge.textContent = formatCompactTimestamp(payload.captured_at);
-      cameraCapturedAt.textContent = formatTimestamp(payload.captured_at);
-      cameraImageStatus.textContent = payload.archived_filename || "latest.jpg";
+      imageEl.src = snapshot.url;
+      imageEl.hidden = false;
+      emptyEl.hidden = true;
+      badgeEl.hidden = false;
+      badgeEl.textContent = formatCompactTimestamp(snapshot.captured_at);
+    }
+
+    function renderCameraArchive(snapshots) {
+      if (!snapshots.length) {
+        cameraArchiveList.innerHTML = '<div class="subtle">No archived snapshots yet.</div>';
+        return;
+      }
+
+      cameraArchiveList.innerHTML = "";
+      snapshots.forEach((snapshot) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `camera-link ${selectedCameraSnapshot?.filename === snapshot.filename ? "active" : ""}`;
+        button.innerHTML = `
+          <span class="camera-link-title">${formatTimestamp(snapshot.captured_at)}</span>
+          <span class="camera-link-meta">${snapshot.filename}</span>
+        `;
+        button.addEventListener("click", () => {
+          selectedCameraSnapshot = snapshot;
+          renderCameraStatus(currentCameraStatus);
+        });
+        cameraArchiveList.appendChild(button);
+      });
+    }
+
+    function renderCameraStatus(payload) {
+      currentCameraStatus = payload || {};
+      const snapshots = payload?.snapshots || [];
+      const latestSnapshot = payload?.latest_snapshot || null;
+      if (!selectedCameraSnapshot || !snapshots.some((snapshot) => snapshot.filename === selectedCameraSnapshot.filename)) {
+        selectedCameraSnapshot = snapshots[0] || latestSnapshot;
+      }
+
+      renderSnapshotPreview(
+        cameraLatestPreview,
+        cameraLatestEmptyState,
+        cameraLatestTimestampBadge,
+        latestSnapshot,
+        payload?.error || "No snapshot captured yet.",
+      );
+      renderSnapshotPreview(
+        cameraSelectedPreview,
+        cameraSelectedEmptyState,
+        cameraSelectedTimestampBadge,
+        selectedCameraSnapshot,
+        "Select a snapshot from the archive list.",
+      );
+
+      cameraLatestCapturedAt.textContent = latestSnapshot ? formatTimestamp(latestSnapshot.captured_at) : "--";
+      cameraSelectedCapturedAt.textContent = selectedCameraSnapshot ? formatTimestamp(selectedCameraSnapshot.captured_at) : "--";
+      renderCameraArchive(snapshots);
     }
 
     async function refreshCameraStatus() {
@@ -3581,20 +3703,34 @@ def fetch_profiles() -> dict:
 
 def fetch_camera_status() -> dict:
     try:
-        return latest_snapshot_info()
+        camera = latest_snapshot_info()
+        snapshots = list_recent_snapshots(limit=20)
+        latest_snapshot = snapshots[0] if snapshots else None
+        if latest_snapshot is None and camera.get("available") and camera.get("latest_url"):
+            latest_snapshot = {
+                "filename": camera.get("latest_display_name") or "Latest snapshot",
+                "captured_at": camera.get("captured_at"),
+                "url": camera.get("latest_url"),
+            }
+        camera["snapshots"] = snapshots
+        camera["latest_snapshot"] = latest_snapshot
+        return camera
     except CameraError as exc:
         return {
             "available": False,
             "captured_at": None,
             "latest_url": None,
             "archived_filename": None,
+            "latest_display_name": None,
+            "snapshots": [],
+            "latest_snapshot": None,
             "error": str(exc),
         }
 
 
 def capture_camera_snapshot() -> dict:
     result = capture_snapshot()
-    camera = latest_snapshot_info()
+    camera = fetch_camera_status()
     camera["captured_at"] = result.captured_at
     camera["archived_filename"] = result.archived_filename
     return {
@@ -4544,6 +4680,28 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 return
             try:
                 image_bytes = latest_path.read_bytes()
+            except OSError:
+                self.send_error(500, "Unable to read snapshot")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(image_bytes)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(image_bytes)
+            return
+
+        if parsed_path.path.startswith("/camera/archive/"):
+            filename = unquote(parsed_path.path.removeprefix("/camera/archive/"))
+            if not filename or Path(filename).name != filename:
+                self.send_error(400, "Invalid snapshot filename")
+                return
+            archived_path = CAMERA_SNAPSHOTS_DIR / filename
+            if not archived_path.exists():
+                self.send_error(404, "Snapshot not found")
+                return
+            try:
+                image_bytes = archived_path.read_bytes()
             except OSError:
                 self.send_error(500, "Unable to read snapshot")
                 return

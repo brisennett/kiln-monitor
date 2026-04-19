@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import subprocess
+from urllib.parse import quote
 
 from config import (
     CAMERA_CAPTURE_TIMEOUT_SECONDS,
@@ -100,12 +101,36 @@ def latest_snapshot_info() -> dict:
             "captured_at": None,
             "latest_url": None,
             "archived_filename": None,
+            "latest_display_name": None,
         }
 
     captured_at = datetime.fromtimestamp(latest_path.stat().st_mtime, timezone.utc).isoformat()
+    snapshots = list_recent_snapshots(limit=1)
+    latest_display_name = snapshots[0]["filename"] if snapshots else latest_path.name
     return {
         "available": True,
         "captured_at": captured_at,
         "latest_url": f"/camera/latest.jpg?ts={int(latest_path.stat().st_mtime)}",
         "archived_filename": latest_path.name,
+        "latest_display_name": latest_display_name,
     }
+
+
+def list_recent_snapshots(limit: int = 20) -> list[dict]:
+    CAMERA_SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    snapshot_paths = sorted(
+        CAMERA_SNAPSHOTS_DIR.glob("snapshot-*.jpg"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    snapshots: list[dict] = []
+    for path in snapshot_paths[: max(0, limit)]:
+        captured_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+        snapshots.append(
+            {
+                "filename": path.name,
+                "captured_at": captured_at,
+                "url": f"/camera/archive/{quote(path.name)}?ts={int(path.stat().st_mtime)}",
+            }
+        )
+    return snapshots
