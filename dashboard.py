@@ -471,13 +471,18 @@ PAGE_HTML = """<!doctype html>
     }
     .camera-shell {
       display: grid;
-      grid-template-columns: minmax(320px, 1.1fr) minmax(260px, 0.9fr);
+      grid-template-columns: minmax(360px, 1.15fr) minmax(280px, 0.85fr);
       gap: 16px;
       align-items: start;
     }
     .camera-preview-grid {
       display: grid;
       gap: 12px;
+    }
+    .camera-side-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
     }
     .camera-preview-card {
       border: 1px solid var(--panel-border);
@@ -502,7 +507,7 @@ PAGE_HTML = """<!doctype html>
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 220px;
+      min-height: 120px;
       border-radius: 14px;
       border: 1px dashed #334155;
       color: #94a3b8;
@@ -525,9 +530,8 @@ PAGE_HTML = """<!doctype html>
     }
     .camera-meta {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: 1fr;
       gap: 12px;
-      margin-bottom: 14px;
     }
     .camera-meta-card {
       border: 1px solid var(--panel-border);
@@ -546,7 +550,7 @@ PAGE_HTML = """<!doctype html>
       border-radius: 14px;
       background: rgba(15, 23, 42, 0.38);
       padding: 10px;
-      max-height: 560px;
+      max-height: 720px;
       overflow-y: auto;
     }
     .camera-archive-list {
@@ -741,6 +745,9 @@ PAGE_HTML = """<!doctype html>
       }
       .camera-shell {
         grid-template-columns: 1fr;
+      }
+      .camera-side-panel {
+        order: -1;
       }
       .ops-grid {
         grid-template-columns: 1fr;
@@ -1270,33 +1277,37 @@ PAGE_HTML = """<!doctype html>
           <div class="camera-shell">
             <div class="camera-preview-grid">
               <div class="camera-preview-card">
-                <div class="label">Latest Snapshot</div>
-                <div class="camera-preview-wrap">
-                  <div id="cameraLatestEmptyState" class="camera-empty">No snapshot captured yet.</div>
-                  <img id="cameraLatestPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
-                  <div id="cameraLatestTimestampBadge" class="camera-timestamp" hidden>--</div>
-                </div>
-              </div>
-
-              <div class="camera-preview-card">
                 <div class="label">Selected Snapshot</div>
                 <div class="camera-preview-wrap">
-                  <div id="cameraSelectedEmptyState" class="camera-empty">Select a snapshot from the archive list.</div>
+                  <div id="cameraSelectedEmptyState" class="camera-empty" hidden></div>
                   <img id="cameraSelectedPreview" class="camera-preview" alt="Selected kiln camera snapshot" hidden />
                   <div id="cameraSelectedTimestampBadge" class="camera-timestamp" hidden>--</div>
                 </div>
               </div>
+
+              <div class="camera-preview-card">
+                <div class="label">Latest Snapshot</div>
+                <div class="camera-preview-wrap">
+                  <div id="cameraLatestEmptyState" class="camera-empty" hidden></div>
+                  <img id="cameraLatestPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
+                  <div id="cameraLatestTimestampBadge" class="camera-timestamp" hidden>--</div>
+                </div>
+              </div>
             </div>
 
-            <div>
+            <div class="camera-side-panel">
+              <div class="label" style="margin-top: 16px;">Recent Snapshots</div>
+              <div class="subtle">Showing the 20 most recent captures in your current time zone.</div>
+              <div class="camera-archive">
+                <div id="cameraArchiveList" class="camera-archive-list">
+                  <div class="subtle">Loading snapshots...</div>
+                </div>
+              </div>
+
               <div class="camera-meta">
                 <div class="camera-meta-card">
                   <div class="label">Latest Capture</div>
                   <div class="value" id="cameraLatestCapturedAt">--</div>
-                </div>
-                <div class="camera-meta-card">
-                  <div class="label">Selected Capture</div>
-                  <div class="value" id="cameraSelectedCapturedAt">--</div>
                 </div>
               </div>
 
@@ -1305,14 +1316,6 @@ PAGE_HTML = """<!doctype html>
                 <button type="button" id="refreshSnapshotButton">Refresh Camera</button>
               </div>
               <div id="cameraStatusMessage" class="success-text"></div>
-
-              <div class="label" style="margin-top: 16px;">Recent Snapshots</div>
-              <div class="subtle">Showing the 20 most recent captures in your current time zone.</div>
-              <div class="camera-archive">
-                <div id="cameraArchiveList" class="camera-archive-list">
-                  <div class="subtle">Loading snapshots...</div>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -1420,7 +1423,6 @@ PAGE_HTML = """<!doctype html>
     const cameraSelectedPreview = document.getElementById("cameraSelectedPreview");
     const cameraSelectedEmptyState = document.getElementById("cameraSelectedEmptyState");
     const cameraSelectedTimestampBadge = document.getElementById("cameraSelectedTimestampBadge");
-    const cameraSelectedCapturedAt = document.getElementById("cameraSelectedCapturedAt");
     const cameraArchiveList = document.getElementById("cameraArchiveList");
     const cameraStatusMessage = document.getElementById("cameraStatusMessage");
     const captureSnapshotButton = document.getElementById("captureSnapshotButton");
@@ -2558,8 +2560,13 @@ PAGE_HTML = """<!doctype html>
       if (!snapshot || !snapshot.url) {
         imageEl.hidden = true;
         imageEl.removeAttribute("src");
-        emptyEl.hidden = false;
-        emptyEl.textContent = fallbackText;
+        if (fallbackText) {
+          emptyEl.hidden = false;
+          emptyEl.textContent = fallbackText;
+        } else {
+          emptyEl.hidden = true;
+          emptyEl.textContent = "";
+        }
         badgeEl.hidden = true;
         return;
       }
@@ -2607,18 +2614,17 @@ PAGE_HTML = """<!doctype html>
         cameraLatestEmptyState,
         cameraLatestTimestampBadge,
         latestSnapshot,
-        payload?.error || "No snapshot captured yet.",
+        "",
       );
       renderSnapshotPreview(
         cameraSelectedPreview,
         cameraSelectedEmptyState,
         cameraSelectedTimestampBadge,
         selectedCameraSnapshot,
-        "Select a snapshot from the archive list.",
+        "",
       );
 
       cameraLatestCapturedAt.textContent = latestSnapshot ? formatTimestamp(latestSnapshot.captured_at) : "--";
-      cameraSelectedCapturedAt.textContent = selectedCameraSnapshot ? formatTimestamp(selectedCameraSnapshot.captured_at) : "--";
       renderCameraArchive(snapshots);
     }
 
