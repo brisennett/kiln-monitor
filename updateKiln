@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Updating kiln-monitor in ${REPO_DIR}"
+git -C "${REPO_DIR}" pull --ff-only
+
+echo "Restarting kiln services"
+sudo systemctl restart kiln-monitor
+sudo systemctl restart kiln-dashboard
+
+echo
+echo "Service status:"
+sudo systemctl --no-pager --lines=0 status kiln-monitor kiln-dashboard
