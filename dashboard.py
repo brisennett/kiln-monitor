@@ -2951,16 +2951,24 @@ ALERTS_PAGE_HTML = """<!doctype html>
     :root {
       color-scheme: dark;
       font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-      background: #0b1220;
-      color: #e5e7eb;
+      --bg: #081018;
+      --bg-soft: #112033;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      color: var(--text);
     }
     body {
       margin: 0;
       padding: 24px;
       min-height: 100vh;
       background:
-        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
-        linear-gradient(180deg, #131d31, #0b1220);
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
     }
     main {
       max-width: 1400px;
@@ -2994,21 +3002,21 @@ ALERTS_PAGE_HTML = """<!doctype html>
       align-items: center;
     }
     .card, .rules-panel {
-      background: #111827;
-      border: 1px solid rgba(56, 189, 248, 0.18);
-      border-radius: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
       padding: 16px;
-      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     }
     .label {
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.85rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 8px;
     }
     .subtle {
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.9rem;
     }
     .section-grid {
@@ -3027,7 +3035,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
       border: 1px solid rgba(148, 163, 184, 0.16);
       border-radius: 12px;
       padding: 12px;
-      background: rgba(15, 23, 42, 0.38);
+      background: rgba(15, 23, 42, 0.52);
     }
     .recent-alert-top {
       display: flex;
@@ -3052,7 +3060,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
       padding: 4px 10px;
       font-size: 0.78rem;
       font-weight: 700;
-      background: #334155;
+      background: rgba(51, 65, 85, 0.9);
     }
     .pill-on {
       background: #065f46;
@@ -3073,27 +3081,27 @@ ALERTS_PAGE_HTML = """<!doctype html>
       background: #991b1b;
     }
     .page-link {
-      border: 1px solid rgba(148, 163, 184, 0.26);
+      border: 1px solid rgba(148, 163, 184, 0.24);
       background: rgba(15, 23, 42, 0.48);
-      color: #cbd5e1;
+      color: var(--text);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       font-weight: 700;
+      min-height: 44px;
     }
     .page-link.active-page {
-      border-color: #38bdf8;
+      border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
-      color: #e5e7eb;
     }
     .nav-button, button {
       border: 1px solid #334155;
-      background: #1f2937;
-      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       cursor: pointer;
       font-weight: 600;
       text-decoration: none;
@@ -3101,8 +3109,8 @@ ALERTS_PAGE_HTML = """<!doctype html>
       align-items: center;
     }
     button.active {
-      background: #2563eb;
-      border-color: #2563eb;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.95), rgba(37, 99, 235, 0.92));
+      border-color: rgba(125, 211, 252, 0.28);
     }
     .tab-strip {
       display: flex;
@@ -4119,16 +4127,24 @@ EVENTS_PAGE_HTML = """<!doctype html>
     :root {
       color-scheme: dark;
       font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-      background: #0b1220;
-      color: #e5e7eb;
+      --bg: #081018;
+      --bg-soft: #112033;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      color: var(--text);
     }
     body {
       margin: 0;
       padding: 24px;
       min-height: 100vh;
       background:
-        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
-        linear-gradient(180deg, #131d31, #0b1220);
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
     }
     main {
       max-width: 1400px;
@@ -4145,20 +4161,20 @@ EVENTS_PAGE_HTML = """<!doctype html>
       margin-bottom: 12px;
     }
     .page-link {
-      border: 1px solid rgba(148, 163, 184, 0.26);
+      border: 1px solid rgba(148, 163, 184, 0.24);
       background: rgba(15, 23, 42, 0.48);
-      color: #cbd5e1;
+      color: var(--text);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       font-weight: 700;
+      min-height: 44px;
     }
     .page-link.active-page {
-      border-color: #38bdf8;
+      border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
-      color: #e5e7eb;
     }
     .page-header {
       display: flex;
@@ -4172,11 +4188,11 @@ EVENTS_PAGE_HTML = """<!doctype html>
       font-size: 2rem;
     }
     .card {
-      background: #111827;
-      border: 1px solid rgba(56, 189, 248, 0.18);
-      border-radius: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
       padding: 16px;
-      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     }
     .section-grid {
       display: grid;
@@ -4185,14 +4201,14 @@ EVENTS_PAGE_HTML = """<!doctype html>
       align-items: start;
     }
     .label {
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.85rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 8px;
     }
     .subtle {
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.9rem;
     }
     .event-form-grid {
@@ -4202,7 +4218,7 @@ EVENTS_PAGE_HTML = """<!doctype html>
     }
     label {
       display: block;
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -4211,9 +4227,9 @@ EVENTS_PAGE_HTML = """<!doctype html>
     input, select {
       width: 100%;
       box-sizing: border-box;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #e5e7eb;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.66);
+      color: var(--text);
       border-radius: 10px;
       padding: 10px 12px;
     }
@@ -4225,10 +4241,10 @@ EVENTS_PAGE_HTML = """<!doctype html>
     }
     button {
       border: 1px solid #334155;
-      background: #1f2937;
-      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       cursor: pointer;
       font-weight: 600;
     }
@@ -4264,7 +4280,7 @@ EVENTS_PAGE_HTML = """<!doctype html>
       padding: 4px 10px;
       font-size: 0.78rem;
       font-weight: 700;
-      background: rgba(56, 189, 248, 0.14);
+      background: rgba(56, 189, 248, 0.16);
       color: #bae6fd;
     }
     @media (max-width: 960px) {
@@ -4482,16 +4498,24 @@ FAULTS_PAGE_HTML = """<!doctype html>
     :root {
       color-scheme: dark;
       font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-      background: #0b1220;
-      color: #e5e7eb;
+      --bg: #081018;
+      --bg-soft: #112033;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      color: var(--text);
     }
     body {
       margin: 0;
       padding: 24px;
       min-height: 100vh;
       background:
-        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
-        linear-gradient(180deg, #131d31, #0b1220);
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
     }
     main {
       max-width: 1400px;
@@ -4508,20 +4532,20 @@ FAULTS_PAGE_HTML = """<!doctype html>
       margin-bottom: 12px;
     }
     .page-link {
-      border: 1px solid rgba(148, 163, 184, 0.26);
+      border: 1px solid rgba(148, 163, 184, 0.24);
       background: rgba(15, 23, 42, 0.48);
-      color: #cbd5e1;
+      color: var(--text);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       font-weight: 700;
+      min-height: 44px;
     }
     .page-link.active-page {
-      border-color: #38bdf8;
+      border-color: var(--accent);
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
-      color: #e5e7eb;
     }
     .page-header, .toolbar {
       display: flex;
@@ -4535,21 +4559,21 @@ FAULTS_PAGE_HTML = """<!doctype html>
       font-size: 2rem;
     }
     .card {
-      background: #111827;
-      border: 1px solid rgba(56, 189, 248, 0.18);
-      border-radius: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
       padding: 16px;
-      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     }
     .label {
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.85rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 8px;
     }
     .subtle {
-      color: #9ca3af;
+      color: var(--muted);
       font-size: 0.9rem;
     }
     .diagnostics-grid {
@@ -4568,7 +4592,7 @@ FAULTS_PAGE_HTML = """<!doctype html>
       border: 1px solid rgba(148, 163, 184, 0.18);
       border-radius: 12px;
       padding: 12px;
-      background: rgba(15, 23, 42, 0.38);
+      background: rgba(15, 23, 42, 0.52);
     }
     .value {
       font-size: 1.05rem;
@@ -4581,10 +4605,10 @@ FAULTS_PAGE_HTML = """<!doctype html>
     }
     button {
       border: 1px solid #334155;
-      background: #1f2937;
-      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       cursor: pointer;
       font-weight: 600;
     }
@@ -4943,6 +4967,11 @@ PANEL_PAGE_HTML = """<!doctype html>
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
     }
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
     .stat-card,
     .risk-card,
     .event-card {
@@ -4983,8 +5012,8 @@ PANEL_PAGE_HTML = """<!doctype html>
     }
     .event-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
     }
     button,
     input {
@@ -4992,13 +5021,14 @@ PANEL_PAGE_HTML = """<!doctype html>
     }
     .event-button,
     .submit-button {
-      min-height: 56px;
-      border-radius: 18px;
+      min-height: 40px;
+      border-radius: 999px;
       border: 1px solid rgba(148, 163, 184, 0.18);
       background: rgba(15, 23, 42, 0.74);
       color: var(--text);
-      padding: 12px;
+      padding: 8px 12px;
       font-weight: 700;
+      font-size: 0.88rem;
     }
     .event-button:active,
     .submit-button:active {
@@ -5007,7 +5037,7 @@ PANEL_PAGE_HTML = """<!doctype html>
     .event-form {
       display: grid;
       gap: 10px;
-      margin-top: 10px;
+      margin-top: 12px;
     }
     .event-note {
       min-height: 48px;
@@ -5048,6 +5078,7 @@ PANEL_PAGE_HTML = """<!doctype html>
     }
     @media (max-width: 380px) {
       .grid,
+      .bottom-grid,
       .event-grid {
         grid-template-columns: 1fr;
       }
@@ -5086,30 +5117,6 @@ PANEL_PAGE_HTML = """<!doctype html>
       </div>
     </section>
 
-    <section class="grid">
-      <section class="panel stat-card">
-        <div class="label">Profile</div>
-        <div class="value" id="profileName">No active profile</div>
-        <div class="detail" id="profileMeta">Start tracking a firing profile to show segment and elapsed time here.</div>
-      </section>
-      <section class="panel stat-card">
-        <div class="label">Segment</div>
-        <div class="value" id="segmentName">--</div>
-        <div class="detail" id="segmentMeta">Expected temp and elapsed time will appear during a run.</div>
-      </section>
-    </section>
-
-    <section id="riskCard" class="panel risk-card risk-ok">
-      <div class="label">Current Attention</div>
-      <div class="value" id="riskTitle">No active alerts or faults</div>
-      <div class="detail" id="riskDetail">The kiln feed looks healthy.</div>
-    </section>
-
-    <section class="helper-row">
-      <button type="button" id="resetFaultsButton" class="secondary-button">Reset Faults</button>
-      <a href="/alerts" class="page-link">Admin Pages</a>
-    </section>
-
     <section class="panel event-card">
       <div class="label">Quick Event Marker</div>
       <div class="event-grid">
@@ -5125,6 +5132,30 @@ PANEL_PAGE_HTML = """<!doctype html>
         <button type="button" id="customEventButton" class="submit-button">Add Note Marker</button>
       </div>
       <div class="event-status" id="eventStatus"></div>
+    </section>
+
+    <section id="riskCard" class="panel risk-card risk-ok">
+      <div class="label">Current Attention</div>
+      <div class="value" id="riskTitle">No active alerts or faults</div>
+      <div class="detail" id="riskDetail">The kiln feed looks healthy.</div>
+    </section>
+
+    <section class="helper-row">
+      <button type="button" id="resetFaultsButton" class="secondary-button">Reset Faults</button>
+      <a href="/alerts" class="page-link">Admin Pages</a>
+    </section>
+
+    <section class="bottom-grid">
+      <section class="panel stat-card">
+        <div class="label">Profile</div>
+        <div class="value" id="profileName">No active profile</div>
+        <div class="detail" id="profileMeta">Start tracking a firing profile to show segment and elapsed time here.</div>
+      </section>
+      <section class="panel stat-card">
+        <div class="label">Segment</div>
+        <div class="value" id="segmentName">--</div>
+        <div class="detail" id="segmentMeta">Expected temp and elapsed time will appear during a run.</div>
+      </section>
     </section>
   </main>
 
