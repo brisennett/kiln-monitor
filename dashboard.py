@@ -4863,8 +4863,7 @@ PANEL_PAGE_HTML = """<!doctype html>
       width: min(100%, 540px);
       margin: 0 auto;
       padding: 12px;
-      display: flex;
-      flex-direction: column;
+      display: grid;
       gap: 12px;
     }
     .topbar {
@@ -5079,6 +5078,67 @@ PANEL_PAGE_HTML = """<!doctype html>
       margin-top: 8px;
       color: #cbd5e1;
       font-size: 0.94rem;
+    }
+    @media (orientation: landscape) and (max-height: 600px) {
+      body {
+        display: flex;
+        align-items: stretch;
+      }
+      main {
+        width: min(100vw, 960px);
+        max-width: none;
+        min-height: 100vh;
+        padding: 10px;
+        grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.95fr);
+        grid-template-areas:
+          "topbar topbar"
+          "hero event"
+          "risk event"
+          "helper event"
+          "bottom bottom";
+        align-content: start;
+      }
+      .topbar {
+        grid-area: topbar;
+        padding-top: 0;
+      }
+      .hero {
+        grid-area: hero;
+        min-height: 0;
+      }
+      #riskCard {
+        grid-area: risk;
+      }
+      .helper-row {
+        grid-area: helper;
+        margin-top: 0;
+      }
+      .event-card {
+        grid-area: event;
+        align-self: stretch;
+      }
+      .bottom-grid {
+        grid-area: bottom;
+      }
+      .hero-status {
+        margin-bottom: 10px;
+      }
+      .temp-reading {
+        font-size: clamp(4.8rem, 14vw, 7rem);
+      }
+      .meta-line {
+        margin-top: 8px;
+        font-size: 0.98rem;
+      }
+      .event-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .event-form {
+        gap: 8px;
+      }
+      .bottom-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
     @media (max-width: 380px) {
       .grid,
