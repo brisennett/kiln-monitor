@@ -151,7 +151,8 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       margin-bottom: 8px;
     }
     .card {
-      background: var(--panel-bg);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
       border: 1px solid var(--panel-border);
       border-radius: 16px;
       padding: 16px;
@@ -2135,9 +2136,6 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
           ctx.beginPath();
           ctx.arc(x, top + 10, 4, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = "#fde68a";
-          ctx.font = "11px system-ui, sans-serif";
-          ctx.fillText((event.label || event.event_type || "event").slice(0, 14), Math.min(x + 6, left + plotWidth - 90), top + 14);
         });
         ctx.restore();
       }
@@ -3002,7 +3000,8 @@ ALERTS_PAGE_HTML = """<!doctype html>
       align-items: center;
     }
     .card, .rules-panel {
-      background: var(--panel);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
       border: 1px solid var(--border);
       border-radius: 22px;
       padding: 16px;
@@ -3035,7 +3034,8 @@ ALERTS_PAGE_HTML = """<!doctype html>
       border: 1px solid rgba(148, 163, 184, 0.16);
       border-radius: 12px;
       padding: 12px;
-      background: rgba(15, 23, 42, 0.52);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.92), rgba(13, 23, 39, 0.82));
     }
     .recent-alert-top {
       display: flex;
@@ -4188,7 +4188,8 @@ EVENTS_PAGE_HTML = """<!doctype html>
       font-size: 2rem;
     }
     .card {
-      background: var(--panel);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
       border: 1px solid var(--border);
       border-radius: 22px;
       padding: 16px;
@@ -4559,7 +4560,8 @@ FAULTS_PAGE_HTML = """<!doctype html>
       font-size: 2rem;
     }
     .card {
-      background: var(--panel);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
       border: 1px solid var(--border);
       border-radius: 22px;
       padding: 16px;
@@ -4592,7 +4594,8 @@ FAULTS_PAGE_HTML = """<!doctype html>
       border: 1px solid rgba(148, 163, 184, 0.18);
       border-radius: 12px;
       padding: 12px;
-      background: rgba(15, 23, 42, 0.52);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.92), rgba(13, 23, 39, 0.82));
     }
     .value {
       font-size: 1.05rem;
@@ -4900,7 +4903,8 @@ PANEL_PAGE_HTML = """<!doctype html>
       box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
     }
     .panel {
-      background: var(--panel);
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
       border: 1px solid var(--border);
       border-radius: 22px;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
