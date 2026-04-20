@@ -1,0 +1,18 @@
+[Unit]
+Description=Kiln Panel Touchscreen Kiosk
+After=graphical.target network-online.target kiln-dashboard.service
+Wants=graphical.target network-online.target kiln-dashboard.service
+
+[Service]
+Type=simple
+User=brisennett
+WorkingDirectory=/home/brisennett/kiln-monitor
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/brisennett/.Xauthority
+Environment=KILN_PANEL_URL=http://127.0.0.1:8080/panel
+ExecStart=/home/brisennett/kiln-monitor/launch-kiosk-panel.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

@@ -137,4 +137,19 @@ If you get only fault messages:
 4. Confirm new rows continue appearing in SQLite after reboot.
 5. Only then move on to enclosure mounting and field wiring near the kiln.
 
+## Optional Appliance Mode
+
+If this Pi will live behind the kiln touchscreen full-time, you can convert it into a kiosk after the monitor and dashboard services are stable.
+
+Use:
+
+- [`KIOSK_MODE.md`](/Users/briansennett/Documents/codex/kiln-monitor/KIOSK_MODE.md)
+
+Recommended order:
+
+1. Confirm `kiln-monitor.service` is stable.
+2. Confirm `kiln-dashboard.service` is stable.
+3. Confirm SSH access works reliably.
+4. Only then enable the touchscreen kiosk service.
+
 Verified on Pi host `kiln-spy`: `kiln-monitor.service` starts automatically after reboot and continues logging MAX31855 temperature samples.

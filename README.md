@@ -6,6 +6,7 @@ Practical Raspberry Pi kiln monitoring for MAX31855 and MAX31856 thermocouple fr
 
 - Hardware manifest: [`HARDWARE.md`](/Users/briansennett/Documents/codex/kiln-monitor/HARDWARE.md)
 - First boot checklist: [`FIRST_BOOT.md`](/Users/briansennett/Documents/codex/kiln-monitor/FIRST_BOOT.md)
+- Touchscreen kiosk setup: [`KIOSK_MODE.md`](/Users/briansennett/Documents/codex/kiln-monitor/KIOSK_MODE.md)
 - First high-temp validation run post-mortem: [`POST_MORTEM_2026-04-18.md`](/Users/briansennett/Documents/codex/kiln-monitor/POST_MORTEM_2026-04-18.md)
 
 ## Why SQLite
@@ -200,6 +201,17 @@ Default chart sampling behavior:
 - `7d` uses `30m` buckets by default
 
 The dashboard does not delete source rows from SQLite when downsampling. It only changes how many points are plotted for readability.
+
+## Touchscreen Kiosk
+
+If the Pi has a dedicated touchscreen, you can make it behave like an appliance and boot directly into the operator panel at `/panel`.
+
+See [`KIOSK_MODE.md`](/Users/briansennett/Documents/codex/kiln-monitor/KIOSK_MODE.md) for:
+
+- Chromium kiosk startup on boot
+- `systemd` service installation
+- remote admin / SSH recovery flow
+- stopping the kiosk when you need the desktop back
 
 ## Profiles
 
