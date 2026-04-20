@@ -4919,20 +4919,21 @@ PANEL_PAGE_HTML = """<!doctype html>
       flex-wrap: wrap;
     }
     .temp-reading {
-      font-size: clamp(3.8rem, 17vw, 5.5rem);
-      line-height: 0.92;
+      font-size: clamp(5.4rem, 24vw, 8.4rem);
+      line-height: 0.88;
       font-weight: 800;
       letter-spacing: -0.04em;
+      text-shadow: 0 10px 30px rgba(56, 189, 248, 0.18);
     }
     .temp-secondary {
       color: var(--muted);
-      font-size: 1rem;
-      padding-bottom: 8px;
+      font-size: 1.15rem;
+      padding-bottom: 12px;
     }
     .meta-line {
       margin-top: 12px;
       color: var(--muted);
-      font-size: 0.98rem;
+      font-size: 1.05rem;
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
@@ -4944,7 +4945,6 @@ PANEL_PAGE_HTML = """<!doctype html>
     }
     .stat-card,
     .risk-card,
-    .snapshot-card,
     .event-card {
       padding: 14px;
     }
@@ -4980,32 +4980,6 @@ PANEL_PAGE_HTML = """<!doctype html>
     .risk-danger {
       border-color: rgba(239, 68, 68, 0.42);
       background: linear-gradient(180deg, rgba(127, 29, 29, 0.34), rgba(13, 23, 39, 0.94));
-    }
-    .snapshot-frame {
-      margin-top: 10px;
-      width: 100%;
-      aspect-ratio: 4 / 3;
-      border-radius: 18px;
-      overflow: hidden;
-      background: rgba(2, 6, 23, 0.65);
-      border: 1px solid rgba(148, 163, 184, 0.16);
-    }
-    .snapshot-frame img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .snapshot-empty {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted);
-      font-size: 0.98rem;
-      text-align: center;
-      padding: 18px;
     }
     .event-grid {
       display: grid;
@@ -5046,6 +5020,15 @@ PANEL_PAGE_HTML = """<!doctype html>
     .submit-button {
       background: linear-gradient(135deg, rgba(14, 165, 233, 0.95), rgba(37, 99, 235, 0.92));
       border-color: rgba(125, 211, 252, 0.28);
+    }
+    .secondary-button {
+      min-height: 48px;
+      border-radius: 14px;
+      border: 1px solid rgba(248, 113, 113, 0.24);
+      background: rgba(127, 29, 29, 0.36);
+      color: var(--text);
+      padding: 10px 14px;
+      font-weight: 700;
     }
     .helper-row {
       display: flex;
@@ -5122,24 +5105,20 @@ PANEL_PAGE_HTML = """<!doctype html>
       <div class="detail" id="riskDetail">The kiln feed looks healthy.</div>
     </section>
 
-    <section class="panel snapshot-card">
-      <div class="label">Latest Snapshot</div>
-      <div class="helper-row">
-        <span id="snapshotMeta">No image captured yet.</span>
-        <a href="/alerts" class="page-link">Admin Pages</a>
-      </div>
-      <div class="snapshot-frame" id="snapshotFrame">
-        <div class="snapshot-empty">No camera snapshot available.</div>
-      </div>
+    <section class="helper-row">
+      <button type="button" id="resetFaultsButton" class="secondary-button">Reset Faults</button>
+      <a href="/alerts" class="page-link">Admin Pages</a>
     </section>
 
     <section class="panel event-card">
       <div class="label">Quick Event Marker</div>
       <div class="event-grid">
         <button type="button" class="event-button" data-event-type="OBSERVATION" data-event-label="Lid Open">Lid Open</button>
-        <button type="button" class="event-button" data-event-type="OBSERVATION" data-event-label="Lid Closed">Lid Closed</button>
         <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Witness Check">Witness Check</button>
-        <button type="button" class="event-button" data-event-type="NOTE" data-event-label="Operator Note">Operator Note</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 1">Stage 1</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 2">Stage 2</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 3">Stage 3</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 4">Stage 4</button>
       </div>
       <div class="event-form">
         <input id="eventDetailInput" class="event-note" type="text" maxlength="160" placeholder="Optional note to append to the marker" />
@@ -5163,8 +5142,6 @@ PANEL_PAGE_HTML = """<!doctype html>
     const riskCard = document.getElementById("riskCard");
     const riskTitle = document.getElementById("riskTitle");
     const riskDetail = document.getElementById("riskDetail");
-    const snapshotMeta = document.getElementById("snapshotMeta");
-    const snapshotFrame = document.getElementById("snapshotFrame");
     const eventStatus = document.getElementById("eventStatus");
     const eventDetailInput = document.getElementById("eventDetailInput");
 
@@ -5280,19 +5257,6 @@ PANEL_PAGE_HTML = """<!doctype html>
       updateRisk(status);
     }
 
-    function renderCamera(camera) {
-      const snapshot = camera.latest_snapshot;
-      if (!snapshot || !(snapshot.url || camera.latest_url)) {
-        snapshotMeta.textContent = camera.error || "No image captured yet.";
-        snapshotFrame.innerHTML = '<div class="snapshot-empty">No camera snapshot available.</div>';
-        return;
-      }
-
-      const imageUrl = `${snapshot.url || camera.latest_url}${(snapshot.url || camera.latest_url).includes("?") ? "&" : "?"}t=${Date.now()}`;
-      snapshotMeta.textContent = `${snapshot.filename || camera.latest_display_name || "Latest snapshot"} • ${formatTimestamp(snapshot.captured_at || camera.captured_at)}`;
-      snapshotFrame.innerHTML = `<img src="${imageUrl}" alt="Latest kiln snapshot" />`;
-    }
-
     async function postEvent(label, eventType, detail) {
       eventStatus.textContent = "Saving marker...";
       const response = await fetch("/api/events", {
@@ -5312,21 +5276,32 @@ PANEL_PAGE_HTML = """<!doctype html>
       eventDetailInput.value = "";
     }
 
+    async function resetFaults() {
+      eventStatus.textContent = "Resetting faults...";
+      const response = await fetch("/api/reset-faults", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to reset faults");
+      }
+      eventStatus.textContent = "Faults reset.";
+    }
+
     async function refreshPanel() {
       try {
-        const [statusResponse, cameraResponse, watchdogResponse] = await Promise.all([
+        const [statusResponse, watchdogResponse] = await Promise.all([
           fetch("/api/status"),
-          fetch("/api/camera/status"),
           fetch("/api/watchdog-settings"),
         ]);
-        const [statusPayload, cameraPayload, watchdogPayload] = await Promise.all([
+        const [statusPayload, watchdogPayload] = await Promise.all([
           statusResponse.json(),
-          cameraResponse.json(),
           watchdogResponse.json(),
         ]);
         staleDataSeconds = Number(watchdogPayload.stale_data_seconds || staleDataSeconds);
         renderStatus(statusPayload);
-        renderCamera(cameraPayload);
       } catch (error) {
         setHealth("danger", "Panel refresh failed");
         riskCard.className = "panel risk-card risk-danger";
@@ -5345,6 +5320,15 @@ PANEL_PAGE_HTML = """<!doctype html>
           eventStatus.textContent = error.message || "Unable to save marker.";
         }
       });
+    });
+
+    document.getElementById("resetFaultsButton").addEventListener("click", async () => {
+      try {
+        await resetFaults();
+        await refreshPanel();
+      } catch (error) {
+        eventStatus.textContent = error.message || "Unable to reset faults.";
+      }
     });
 
     document.getElementById("customEventButton").addEventListener("click", async () => {
