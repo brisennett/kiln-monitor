@@ -653,6 +653,12 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       gap: 12px;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     }
+    .filter-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 14px;
+    }
     .diagnostics-grid {
       display: grid;
       gap: 12px;
@@ -786,6 +792,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     <h1>Kiln Monitor</h1>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link active-page">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
       <a href="/alerts" class="page-link">Alerts</a>
       <a href="/events" class="page-link">Events</a>
       <a href="/faults" class="page-link">Faults</a>
@@ -1909,8 +1916,14 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
         }
       });
 
-      const boxWidth = 210;
-      const boxHeight = 58;
+      const matchingEvents = (chartState.events || []).filter((event) => {
+        const eventTime = new Date(event.timestamp_utc).getTime();
+        const pointTime = new Date(nearest.timestamp_utc).getTime();
+        return Math.abs(eventTime - pointTime) <= Math.max(30000, chartState.timeSpan * 0.01);
+      }).slice(0, 3);
+
+      const boxWidth = 320;
+      const boxHeight = 58 + (matchingEvents.length * 18);
       const boxX = Math.min(
         Math.max(12, nearest.x + 12),
         canvas.getBoundingClientRect().width - boxWidth - 12,
@@ -1946,6 +1959,18 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "12px system-ui, sans-serif";
       ctx.fillText(formatTimestamp(nearest.timestamp_utc), boxX + 12, boxY + 42);
+
+      if (matchingEvents.length) {
+        ctx.fillStyle = "#facc15";
+        ctx.font = "700 12px system-ui, sans-serif";
+        ctx.fillText("Events", boxX + 12, boxY + 60);
+        ctx.fillStyle = "#fde68a";
+        ctx.font = "12px system-ui, sans-serif";
+        matchingEvents.forEach((event, index) => {
+          const label = event.detail ? `${event.label}: ${event.detail}` : event.label;
+          ctx.fillText(label.slice(0, 40), boxX + 12, boxY + 78 + (index * 18));
+        });
+      }
     }
 
     function drawChart(points, overlayPoints = [], events = []) {
@@ -1964,15 +1989,6 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       const bottom = 36;
       const plotWidth = Math.max(1, width - left - right);
       const plotHeight = Math.max(1, height - top - bottom);
-
-      chartState = {
-        points,
-        plotPoints: [],
-        overlayPoints,
-        events,
-        top,
-        plotHeight,
-      };
 
       ctx.fillStyle = "#0f172a";
       ctx.fillRect(0, 0, width, height);
@@ -2010,6 +2026,16 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       }
       const timeSpan = Math.max(1, maxTime - minTime);
       const tempSpan = Math.max(1, paddedMaxTemp - paddedMinTemp);
+
+      chartState = {
+        points,
+        plotPoints: [],
+        overlayPoints,
+        events,
+        top,
+        plotHeight,
+        timeSpan,
+      };
 
       function xFor(pointTime) {
         return left + ((pointTime - minTime) / timeSpan) * plotWidth;
@@ -2109,6 +2135,9 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
           ctx.beginPath();
           ctx.arc(x, top + 10, 4, 0, Math.PI * 2);
           ctx.fill();
+          ctx.fillStyle = "#fde68a";
+          ctx.font = "11px system-ui, sans-serif";
+          ctx.fillText((event.label || event.event_type || "event").slice(0, 14), Math.min(x + 6, left + plotWidth - 90), top + 14);
         });
         ctx.restore();
       }
@@ -3242,6 +3271,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
   <main>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
       <a href="/alerts" class="page-link active-page">Alerts</a>
       <a href="/events" class="page-link">Events</a>
       <a href="/faults" class="page-link">Faults</a>
@@ -4256,6 +4286,7 @@ EVENTS_PAGE_HTML = """<!doctype html>
   <main>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
       <a href="/alerts" class="page-link">Alerts</a>
       <a href="/events" class="page-link active-page">Events</a>
       <a href="/faults" class="page-link">Faults</a>
@@ -4305,6 +4336,34 @@ EVENTS_PAGE_HTML = """<!doctype html>
       <section class="card">
         <div class="label">Recent Events</div>
         <div class="subtle">Showing the 100 most recent event markers.</div>
+        <div class="filter-grid">
+          <div>
+            <label for="eventFilterType">Type</label>
+            <select id="eventFilterType">
+              <option value="">All Types</option>
+              <option value="OPERATION">Operation</option>
+              <option value="POWER">Power</option>
+              <option value="OBSERVATION">Observation</option>
+              <option value="NOTE">Note</option>
+            </select>
+          </div>
+          <div>
+            <label for="eventFilterSearch">Search</label>
+            <input id="eventFilterSearch" type="text" placeholder="Label or detail" />
+          </div>
+          <div>
+            <label for="eventFilterStart">Start</label>
+            <input id="eventFilterStart" type="datetime-local" />
+          </div>
+          <div>
+            <label for="eventFilterEnd">End</label>
+            <input id="eventFilterEnd" type="datetime-local" />
+          </div>
+        </div>
+        <div class="rule-actions" style="margin-top: 12px;">
+          <button type="button" id="applyEventFiltersButton">Apply Filters</button>
+          <button type="button" id="clearEventFiltersButton">Clear Filters</button>
+        </div>
         <div class="rules-table-wrap">
           <table>
             <thead>
@@ -4328,6 +4387,10 @@ EVENTS_PAGE_HTML = """<!doctype html>
     const eventForm = document.getElementById("eventForm");
     const eventStatus = document.getElementById("eventStatus");
     const eventsTableBody = document.getElementById("eventsTableBody");
+    const eventFilterType = document.getElementById("eventFilterType");
+    const eventFilterSearch = document.getElementById("eventFilterSearch");
+    const eventFilterStart = document.getElementById("eventFilterStart");
+    const eventFilterEnd = document.getElementById("eventFilterEnd");
 
     function formatTimestamp(isoText) {
       if (!isoText) return "--";
@@ -4353,7 +4416,12 @@ EVENTS_PAGE_HTML = """<!doctype html>
     }
 
     async function refreshEvents() {
-      const response = await fetch("/api/events?limit=100");
+      const params = new URLSearchParams({ limit: "100" });
+      if (eventFilterType.value) params.set("event_type", eventFilterType.value);
+      if (eventFilterSearch.value.trim()) params.set("search", eventFilterSearch.value.trim());
+      if (eventFilterStart.value) params.set("start", new Date(eventFilterStart.value).toISOString());
+      if (eventFilterEnd.value) params.set("end", new Date(eventFilterEnd.value).toISOString());
+      const response = await fetch(`/api/events?${params.toString()}`);
       const payload = await response.json();
       renderEvents(payload.events || []);
     }
@@ -4382,6 +4450,18 @@ EVENTS_PAGE_HTML = """<!doctype html>
     });
 
     document.getElementById("refreshEventsButton").addEventListener("click", async () => {
+      await refreshEvents();
+    });
+
+    document.getElementById("applyEventFiltersButton").addEventListener("click", async () => {
+      await refreshEvents();
+    });
+
+    document.getElementById("clearEventFiltersButton").addEventListener("click", async () => {
+      eventFilterType.value = "";
+      eventFilterSearch.value = "";
+      eventFilterStart.value = "";
+      eventFilterEnd.value = "";
       await refreshEvents();
     });
 
@@ -4478,6 +4558,12 @@ FAULTS_PAGE_HTML = """<!doctype html>
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       margin-top: 14px;
     }
+    .filter-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 14px;
+    }
     .diagnostic-card {
       border: 1px solid rgba(148, 163, 184, 0.18);
       border-radius: 12px;
@@ -4535,6 +4621,7 @@ FAULTS_PAGE_HTML = """<!doctype html>
   <main>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
       <a href="/alerts" class="page-link">Alerts</a>
       <a href="/events" class="page-link">Events</a>
       <a href="/faults" class="page-link active-page">Faults</a>
@@ -4565,6 +4652,32 @@ FAULTS_PAGE_HTML = """<!doctype html>
     <section class="card">
       <div class="label">Recent Fault Samples</div>
       <div class="subtle">Showing up to 100 recent fault rows in the selected window.</div>
+      <div class="filter-grid">
+        <div>
+          <label for="faultSearch">Search Detail</label>
+          <input id="faultSearch" type="text" placeholder="Disconnected, CRC, etc." />
+        </div>
+        <div>
+          <label for="faultMinTemp">Min Temp F</label>
+          <input id="faultMinTemp" type="number" step="0.1" />
+        </div>
+        <div>
+          <label for="faultMaxTemp">Max Temp F</label>
+          <input id="faultMaxTemp" type="number" step="0.1" />
+        </div>
+        <div>
+          <label for="faultStart">Start</label>
+          <input id="faultStart" type="datetime-local" />
+        </div>
+        <div>
+          <label for="faultEnd">End</label>
+          <input id="faultEnd" type="datetime-local" />
+        </div>
+      </div>
+      <div class="range-buttons" style="margin-top: 12px;">
+        <button type="button" id="applyFaultFiltersButton">Apply Filters</button>
+        <button type="button" id="clearFaultFiltersButton">Clear Filters</button>
+      </div>
       <div class="rules-table-wrap">
         <table>
           <thead>
@@ -4585,6 +4698,11 @@ FAULTS_PAGE_HTML = """<!doctype html>
   <script>
     const diagnosticsGrid = document.getElementById("diagnosticsGrid");
     const faultsTableBody = document.getElementById("faultsTableBody");
+    const faultSearch = document.getElementById("faultSearch");
+    const faultMinTemp = document.getElementById("faultMinTemp");
+    const faultMaxTemp = document.getElementById("faultMaxTemp");
+    const faultStart = document.getElementById("faultStart");
+    const faultEnd = document.getElementById("faultEnd");
     let selectedRange = "24h";
 
     function formatTimestamp(isoText) {
@@ -4635,7 +4753,16 @@ FAULTS_PAGE_HTML = """<!doctype html>
     }
 
     async function refreshFaults() {
-      const response = await fetch(`/api/faults?range=${encodeURIComponent(selectedRange)}&limit=100`);
+      const params = new URLSearchParams({
+        range: selectedRange,
+        limit: "100",
+      });
+      if (faultSearch.value.trim()) params.set("search", faultSearch.value.trim());
+      if (faultMinTemp.value) params.set("min_temp_f", faultMinTemp.value);
+      if (faultMaxTemp.value) params.set("max_temp_f", faultMaxTemp.value);
+      if (faultStart.value) params.set("start", new Date(faultStart.value).toISOString());
+      if (faultEnd.value) params.set("end", new Date(faultEnd.value).toISOString());
+      const response = await fetch(`/api/faults?${params.toString()}`);
       const payload = await response.json();
       renderDiagnostics(payload.diagnostics || null);
       renderFaults(payload.faults || []);
@@ -4651,8 +4778,591 @@ FAULTS_PAGE_HTML = """<!doctype html>
       });
     });
 
+    document.getElementById("applyFaultFiltersButton").addEventListener("click", async () => {
+      await refreshFaults();
+    });
+
+    document.getElementById("clearFaultFiltersButton").addEventListener("click", async () => {
+      faultSearch.value = "";
+      faultMinTemp.value = "";
+      faultMaxTemp.value = "";
+      faultStart.value = "";
+      faultEnd.value = "";
+      await refreshFaults();
+    });
+
     refreshFaults();
     setInterval(refreshFaults, 5000);
+  </script>
+</body>
+</html>
+"""
+
+PANEL_PAGE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Kiln Monitor Panel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      --bg: #081018;
+      --bg-soft: #112033;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
+      color: var(--text);
+    }
+    main {
+      width: min(100%, 540px);
+      margin: 0 auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 2px 0;
+    }
+    .eyebrow {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-size: 1.55rem;
+      line-height: 1.1;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.52);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 700;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .page-link.active-page {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+    .hero {
+      padding: 16px;
+      background:
+        linear-gradient(135deg, rgba(56, 189, 248, 0.20), rgba(8, 16, 24, 0)),
+        var(--panel-strong);
+    }
+    .hero-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .health-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+    }
+    .hero-temp {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .temp-reading {
+      font-size: clamp(3.8rem, 17vw, 5.5rem);
+      line-height: 0.92;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+    .temp-secondary {
+      color: var(--muted);
+      font-size: 1rem;
+      padding-bottom: 8px;
+    }
+    .meta-line {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.98rem;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .stat-card,
+    .risk-card,
+    .snapshot-card,
+    .event-card {
+      padding: 14px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.11em;
+      margin-bottom: 10px;
+    }
+    .value {
+      font-size: 1.28rem;
+      font-weight: 700;
+      line-height: 1.18;
+    }
+    .detail {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.35;
+    }
+    .risk-card {
+      border-width: 2px;
+    }
+    .risk-ok {
+      border-color: rgba(34, 197, 94, 0.35);
+      background: linear-gradient(180deg, rgba(20, 83, 45, 0.28), rgba(13, 23, 39, 0.94));
+    }
+    .risk-warning {
+      border-color: rgba(245, 158, 11, 0.40);
+      background: linear-gradient(180deg, rgba(120, 53, 15, 0.32), rgba(13, 23, 39, 0.94));
+    }
+    .risk-danger {
+      border-color: rgba(239, 68, 68, 0.42);
+      background: linear-gradient(180deg, rgba(127, 29, 29, 0.34), rgba(13, 23, 39, 0.94));
+    }
+    .snapshot-frame {
+      margin-top: 10px;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .snapshot-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .snapshot-empty {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.98rem;
+      text-align: center;
+      padding: 18px;
+    }
+    .event-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    button,
+    input {
+      font: inherit;
+    }
+    .event-button,
+    .submit-button {
+      min-height: 56px;
+      border-radius: 18px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
+      padding: 12px;
+      font-weight: 700;
+    }
+    .event-button:active,
+    .submit-button:active {
+      transform: translateY(1px);
+    }
+    .event-form {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .event-note {
+      min-height: 48px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.66);
+      color: var(--text);
+      padding: 12px 14px;
+    }
+    .submit-button {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.95), rgba(37, 99, 235, 0.92));
+      border-color: rgba(125, 211, 252, 0.28);
+    }
+    .helper-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .event-status {
+      min-height: 1.2em;
+      margin-top: 8px;
+      color: #cbd5e1;
+      font-size: 0.94rem;
+    }
+    @media (max-width: 380px) {
+      .grid,
+      .event-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero-status {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="topbar">
+      <div>
+        <div class="eyebrow">Operator Surface</div>
+        <h1>Kiln Panel</h1>
+      </div>
+      <a href="/" class="page-link">Dashboard</a>
+    </section>
+
+    <section class="panel hero">
+      <div class="hero-status">
+        <div class="health-pill">
+          <span id="healthDot" class="health-dot"></span>
+          <span id="healthText">Checking feed...</span>
+        </div>
+        <a href="/panel" class="page-link active-page">Panel</a>
+      </div>
+      <div class="hero-temp">
+        <div class="temp-reading" id="currentTemp">--</div>
+        <div class="temp-secondary" id="currentTempSecondary">Waiting for data</div>
+      </div>
+      <div class="meta-line">
+        <span id="lastUpdateText">Last update: --</span>
+        <span id="sampleAgeText">Age: --</span>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="panel stat-card">
+        <div class="label">Profile</div>
+        <div class="value" id="profileName">No active profile</div>
+        <div class="detail" id="profileMeta">Start tracking a firing profile to show segment and elapsed time here.</div>
+      </section>
+      <section class="panel stat-card">
+        <div class="label">Segment</div>
+        <div class="value" id="segmentName">--</div>
+        <div class="detail" id="segmentMeta">Expected temp and elapsed time will appear during a run.</div>
+      </section>
+    </section>
+
+    <section id="riskCard" class="panel risk-card risk-ok">
+      <div class="label">Current Attention</div>
+      <div class="value" id="riskTitle">No active alerts or faults</div>
+      <div class="detail" id="riskDetail">The kiln feed looks healthy.</div>
+    </section>
+
+    <section class="panel snapshot-card">
+      <div class="label">Latest Snapshot</div>
+      <div class="helper-row">
+        <span id="snapshotMeta">No image captured yet.</span>
+        <a href="/alerts" class="page-link">Admin Pages</a>
+      </div>
+      <div class="snapshot-frame" id="snapshotFrame">
+        <div class="snapshot-empty">No camera snapshot available.</div>
+      </div>
+    </section>
+
+    <section class="panel event-card">
+      <div class="label">Quick Event Marker</div>
+      <div class="event-grid">
+        <button type="button" class="event-button" data-event-type="OBSERVATION" data-event-label="Lid Open">Lid Open</button>
+        <button type="button" class="event-button" data-event-type="OBSERVATION" data-event-label="Lid Closed">Lid Closed</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Witness Check">Witness Check</button>
+        <button type="button" class="event-button" data-event-type="NOTE" data-event-label="Operator Note">Operator Note</button>
+      </div>
+      <div class="event-form">
+        <input id="eventDetailInput" class="event-note" type="text" maxlength="160" placeholder="Optional note to append to the marker" />
+        <button type="button" id="customEventButton" class="submit-button">Add Note Marker</button>
+      </div>
+      <div class="event-status" id="eventStatus"></div>
+    </section>
+  </main>
+
+  <script>
+    const currentTemp = document.getElementById("currentTemp");
+    const currentTempSecondary = document.getElementById("currentTempSecondary");
+    const lastUpdateText = document.getElementById("lastUpdateText");
+    const sampleAgeText = document.getElementById("sampleAgeText");
+    const healthDot = document.getElementById("healthDot");
+    const healthText = document.getElementById("healthText");
+    const profileName = document.getElementById("profileName");
+    const profileMeta = document.getElementById("profileMeta");
+    const segmentName = document.getElementById("segmentName");
+    const segmentMeta = document.getElementById("segmentMeta");
+    const riskCard = document.getElementById("riskCard");
+    const riskTitle = document.getElementById("riskTitle");
+    const riskDetail = document.getElementById("riskDetail");
+    const snapshotMeta = document.getElementById("snapshotMeta");
+    const snapshotFrame = document.getElementById("snapshotFrame");
+    const eventStatus = document.getElementById("eventStatus");
+    const eventDetailInput = document.getElementById("eventDetailInput");
+
+    let staleDataSeconds = 120;
+
+    function formatTimestamp(isoText) {
+      if (!isoText) return "--";
+      return new Date(isoText).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+
+    function formatElapsed(seconds) {
+      if (!Number.isFinite(seconds) || seconds < 0) return "--";
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes}m`;
+    }
+
+    function formatTempPrimary(tempF) {
+      if (tempF === null || tempF === undefined || Number.isNaN(Number(tempF))) return "--";
+      return `${Math.round(Number(tempF))}°F`;
+    }
+
+    function formatTempSecondary(tempC) {
+      if (tempC === null || tempC === undefined || Number.isNaN(Number(tempC))) return "";
+      return `${Number(tempC).toFixed(1)}°C`;
+    }
+
+    function setHealth(state, text) {
+      const colors = {
+        ok: "var(--ok)",
+        warn: "var(--warn)",
+        danger: "var(--danger)",
+      };
+      healthDot.style.background = colors[state] || "var(--muted)";
+      healthDot.style.boxShadow = `0 0 0 4px ${state === "danger" ? "rgba(239, 68, 68, 0.16)" : state === "warn" ? "rgba(245, 158, 11, 0.16)" : "rgba(34, 197, 94, 0.16)"}`;
+      healthText.textContent = text;
+    }
+
+    function updateRisk(status) {
+      const latestSample = status.latest_sample;
+      const latestFault = status.latest_fault;
+      const activeAlertRule = status.active_alert_rule;
+      riskCard.className = "panel risk-card";
+
+      if (activeAlertRule) {
+        const severity = String(activeAlertRule.severity || "WARNING").toUpperCase();
+        riskCard.classList.add(severity === "CRITICAL" ? "risk-danger" : "risk-warning");
+        riskTitle.textContent = `${severity} Alert: ${activeAlertRule.name || "Rule active"}`;
+        riskDetail.textContent = `Threshold ${Math.round(Number(activeAlertRule.threshold_f || 0))}°F • Last trigger ${formatTimestamp(activeAlertRule.last_triggered_at)}`;
+        return;
+      }
+
+      if (latestFault) {
+        riskCard.classList.add("risk-danger");
+        riskTitle.textContent = "Latest Fault Sample";
+        riskDetail.textContent = `${latestFault.detail || "Sensor fault"} • ${latestFault.sample_age || formatTimestamp(latestFault.timestamp_utc)}`;
+        return;
+      }
+
+      if (!latestSample || latestSample.status !== "OK") {
+        riskCard.classList.add("risk-warning");
+        riskTitle.textContent = "Temperature Feed Needs Attention";
+        riskDetail.textContent = latestSample && latestSample.detail ? latestSample.detail : "No healthy live sample is available right now.";
+        return;
+      }
+
+      riskCard.classList.add("risk-ok");
+      riskTitle.textContent = "No active alerts or faults";
+      riskDetail.textContent = "The kiln feed looks healthy.";
+    }
+
+    function renderStatus(status) {
+      const latestSample = status.latest_sample;
+      const activeRun = status.active_profile_run;
+      const sampleTime = latestSample && latestSample.timestamp_utc ? new Date(latestSample.timestamp_utc).getTime() : null;
+      const ageSeconds = sampleTime ? Math.max(0, Math.floor((Date.now() - sampleTime) / 1000)) : null;
+
+      currentTemp.textContent = latestSample ? formatTempPrimary(latestSample.temp_f) : "--";
+      currentTempSecondary.textContent = latestSample
+        ? [formatTempSecondary(latestSample.temp_c), latestSample.status === "OK" ? "Live sample" : (latestSample.detail || "Fault sample")].filter(Boolean).join(" • ")
+        : "Waiting for data";
+      lastUpdateText.textContent = `Last update: ${latestSample ? formatTimestamp(latestSample.timestamp_utc) : "--"}`;
+      sampleAgeText.textContent = `Age: ${latestSample ? (latestSample.sample_age || "--") : "--"}`;
+
+      if (!latestSample || ageSeconds === null) {
+        setHealth("danger", "No live data");
+      } else if (latestSample.status !== "OK") {
+        setHealth("danger", "Faulted sample feed");
+      } else if (ageSeconds > staleDataSeconds) {
+        setHealth("warn", "Feed is stale");
+      } else {
+        setHealth("ok", "Feed is fresh");
+      }
+
+      if (activeRun) {
+        profileName.textContent = activeRun.name || "Active profile";
+        profileMeta.textContent = `${activeRun.phase || "Running"} • Started ${formatTimestamp(activeRun.started_at)}`;
+        segmentName.textContent = activeRun.segment_name || "Between segments";
+        segmentMeta.textContent = `${formatTempPrimary(activeRun.expected_temp_f)} expected • ${formatElapsed(activeRun.elapsed_seconds)} elapsed`;
+      } else {
+        profileName.textContent = "No active profile";
+        profileMeta.textContent = "Start tracking a firing profile to show segment and elapsed time here.";
+        segmentName.textContent = "--";
+        segmentMeta.textContent = "Expected temp and elapsed time will appear during a run.";
+      }
+
+      updateRisk(status);
+    }
+
+    function renderCamera(camera) {
+      const snapshot = camera.latest_snapshot;
+      if (!snapshot || !(snapshot.url || camera.latest_url)) {
+        snapshotMeta.textContent = camera.error || "No image captured yet.";
+        snapshotFrame.innerHTML = '<div class="snapshot-empty">No camera snapshot available.</div>';
+        return;
+      }
+
+      const imageUrl = `${snapshot.url || camera.latest_url}${(snapshot.url || camera.latest_url).includes("?") ? "&" : "?"}t=${Date.now()}`;
+      snapshotMeta.textContent = `${snapshot.filename || camera.latest_display_name || "Latest snapshot"} • ${formatTimestamp(snapshot.captured_at || camera.captured_at)}`;
+      snapshotFrame.innerHTML = `<img src="${imageUrl}" alt="Latest kiln snapshot" />`;
+    }
+
+    async function postEvent(label, eventType, detail) {
+      eventStatus.textContent = "Saving marker...";
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label,
+          event_type: eventType,
+          detail: detail || "",
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to save marker");
+      }
+      eventStatus.textContent = `${label} saved.`;
+      eventDetailInput.value = "";
+    }
+
+    async function refreshPanel() {
+      try {
+        const [statusResponse, cameraResponse, watchdogResponse] = await Promise.all([
+          fetch("/api/status"),
+          fetch("/api/camera/status"),
+          fetch("/api/watchdog-settings"),
+        ]);
+        const [statusPayload, cameraPayload, watchdogPayload] = await Promise.all([
+          statusResponse.json(),
+          cameraResponse.json(),
+          watchdogResponse.json(),
+        ]);
+        staleDataSeconds = Number(watchdogPayload.stale_data_seconds || staleDataSeconds);
+        renderStatus(statusPayload);
+        renderCamera(cameraPayload);
+      } catch (error) {
+        setHealth("danger", "Panel refresh failed");
+        riskCard.className = "panel risk-card risk-danger";
+        riskTitle.textContent = "Refresh Error";
+        riskDetail.textContent = error.message || "Unable to load panel data.";
+      }
+    }
+
+    document.querySelectorAll(".event-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const detail = eventDetailInput.value.trim();
+        try {
+          await postEvent(button.dataset.eventLabel, button.dataset.eventType, detail);
+          await refreshPanel();
+        } catch (error) {
+          eventStatus.textContent = error.message || "Unable to save marker.";
+        }
+      });
+    });
+
+    document.getElementById("customEventButton").addEventListener("click", async () => {
+      const detail = eventDetailInput.value.trim();
+      if (!detail) {
+        eventStatus.textContent = "Add a note before saving a custom marker.";
+        return;
+      }
+      try {
+        await postEvent("Operator Note", "NOTE", detail);
+        await refreshPanel();
+      } catch (error) {
+        eventStatus.textContent = error.message || "Unable to save marker.";
+      }
+    });
+
+    refreshPanel();
+    setInterval(refreshPanel, 5000);
   </script>
 </body>
 </html>
@@ -5835,7 +6545,14 @@ def fetch_recent_alerts(limit: int = 6) -> dict:
     }
 
 
-def fetch_events(limit: int = 100) -> dict:
+def fetch_events(
+    limit: int = 100,
+    *,
+    event_type: str | None = None,
+    search: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
     connection = open_readonly_connection()
     if connection is None or not table_exists(connection, "kiln_events"):
         if connection is not None:
@@ -5843,14 +6560,31 @@ def fetch_events(limit: int = 100) -> dict:
         return {"events": []}
 
     try:
+        clauses = []
+        params: list[object] = []
+        if event_type:
+            clauses.append("event_type = ?")
+            params.append(event_type.strip().upper())
+        if search:
+            clauses.append("(label LIKE ? OR detail LIKE ?)")
+            like_value = f"%{search.strip()}%"
+            params.extend([like_value, like_value])
+        if start:
+            clauses.append("timestamp_utc >= ?")
+            params.append(start)
+        if end:
+            clauses.append("timestamp_utc <= ?")
+            params.append(end)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = connection.execute(
-            """
+            f"""
             SELECT id, timestamp_utc, event_type, label, detail
             FROM kiln_events
+            {where_sql}
             ORDER BY id DESC
             LIMIT ?
             """,
-            (limit,),
+            (*params, limit),
         ).fetchall()
     finally:
         connection.close()
@@ -5870,7 +6604,16 @@ def fetch_events(limit: int = 100) -> dict:
     }
 
 
-def fetch_faults(window_name: str = "24h", limit: int = 100) -> dict:
+def fetch_faults(
+    window_name: str = "24h",
+    limit: int = 100,
+    *,
+    search: str | None = None,
+    min_temp_f: float | None = None,
+    max_temp_f: float | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
     if window_name not in HISTORY_WINDOWS:
         window_name = "24h"
 
@@ -5880,18 +6623,36 @@ def fetch_faults(window_name: str = "24h", limit: int = 100) -> dict:
 
     cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
     try:
+        clauses = ["status = 'ERROR'"]
+        params: list[object] = []
+        effective_start = start or cutoff
+        if effective_start:
+            clauses.append("timestamp_utc >= ?")
+            params.append(effective_start)
+        if end:
+            clauses.append("timestamp_utc <= ?")
+            params.append(end)
+        if search:
+            clauses.append("detail LIKE ?")
+            params.append(f"%{search.strip()}%")
+        if min_temp_f is not None:
+            clauses.append("temp_f >= ?")
+            params.append(min_temp_f)
+        if max_temp_f is not None:
+            clauses.append("temp_f <= ?")
+            params.append(max_temp_f)
+        where_sql = " AND ".join(clauses)
         rows = connection.execute(
-            """
+            f"""
             SELECT id, timestamp_utc, temp_c, temp_f, detail
             FROM temperature_log
-            WHERE status = 'ERROR'
-              AND timestamp_utc >= ?
+            WHERE {where_sql}
             ORDER BY id DESC
             LIMIT ?
             """,
-            (cutoff, limit),
+            (*params, limit),
         ).fetchall()
-        diagnostics = build_fault_diagnostics(connection, cutoff)
+        diagnostics = build_fault_diagnostics(connection, effective_start)
     finally:
         connection.close()
 
@@ -6312,6 +7073,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_text_response(ALERTS_PAGE_HTML, content_type="text/html; charset=utf-8")
             return
 
+        if parsed_path.path == "/panel":
+            self.send_text_response(PANEL_PAGE_HTML, content_type="text/html; charset=utf-8")
+            return
+
         if parsed_path.path == "/events":
             self.send_text_response(EVENTS_PAGE_HTML, content_type="text/html; charset=utf-8")
             return
@@ -6386,14 +7151,43 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed_path.path == "/api/events":
             query = parse_qs(parsed_path.query)
             limit = int(query.get("limit", ["100"])[0])
-            self.send_json_response(fetch_events(limit=max(1, min(limit, 500))))
+            event_type = query.get("event_type", [""])[0].strip() or None
+            search = query.get("search", [""])[0].strip() or None
+            start = query.get("start", [""])[0].strip() or None
+            end = query.get("end", [""])[0].strip() or None
+            self.send_json_response(
+                fetch_events(
+                    limit=max(1, min(limit, 500)),
+                    event_type=event_type,
+                    search=search,
+                    start=start,
+                    end=end,
+                )
+            )
             return
 
         if parsed_path.path == "/api/faults":
             query = parse_qs(parsed_path.query)
             range_name = query.get("range", ["24h"])[0]
             limit = int(query.get("limit", ["100"])[0])
-            self.send_json_response(fetch_faults(range_name, limit=max(1, min(limit, 500))))
+            search = query.get("search", [""])[0].strip() or None
+            start = query.get("start", [""])[0].strip() or None
+            end = query.get("end", [""])[0].strip() or None
+            min_temp_text = query.get("min_temp_f", [""])[0].strip()
+            max_temp_text = query.get("max_temp_f", [""])[0].strip()
+            min_temp_f = float(min_temp_text) if min_temp_text else None
+            max_temp_f = float(max_temp_text) if max_temp_text else None
+            self.send_json_response(
+                fetch_faults(
+                    range_name,
+                    limit=max(1, min(limit, 500)),
+                    search=search,
+                    min_temp_f=min_temp_f,
+                    max_temp_f=max_temp_f,
+                    start=start,
+                    end=end,
+                )
+            )
             return
 
         if parsed_path.path == "/api/alert-channels":
