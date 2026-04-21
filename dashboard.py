@@ -200,6 +200,17 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       gap: 8px;
       flex-wrap: wrap;
     }
+    .history-filter-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: end;
+      margin: 10px 0 12px;
+    }
+    .history-filter-field {
+      min-width: 180px;
+      flex: 1 1 180px;
+    }
     .page-link {
       border: 1px solid rgba(148, 163, 184, 0.26);
       background: rgba(15, 23, 42, 0.48);
@@ -870,6 +881,18 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
               <button type="button" data-range="7d">7d</button>
             </div>
           </div>
+          <div class="history-filter-bar">
+            <div class="history-filter-field">
+              <label for="historyStart">History Start</label>
+              <input id="historyStart" type="datetime-local" />
+            </div>
+            <div class="history-filter-field">
+              <label for="historyEnd">History End</label>
+              <input id="historyEnd" type="datetime-local" />
+            </div>
+            <button type="button" id="applyHistoryFilterButton">Apply Time Filter</button>
+            <button type="button" id="clearHistoryFilterButton">Clear Filter</button>
+          </div>
           <canvas id="tempChart"></canvas>
           <div class="subtle">Red dots mark fault samples. Gaps show periods where no valid temperature was logged.</div>
         </section>
@@ -1150,6 +1173,10 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     const canvas = document.getElementById("tempChart");
     const ctx = canvas.getContext("2d");
     const resolutionSelect = document.getElementById("resolutionSelect");
+    const historyStart = document.getElementById("historyStart");
+    const historyEnd = document.getElementById("historyEnd");
+    const applyHistoryFilterButton = document.getElementById("applyHistoryFilterButton");
+    const clearHistoryFilterButton = document.getElementById("clearHistoryFilterButton");
     const unitSelect = document.getElementById("unitSelect");
     const layoutToggle = document.getElementById("layoutToggle");
     const openSetupButton = document.getElementById("openSetupButton");
@@ -1164,6 +1191,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     const alertTabPanels = Array.from(document.querySelectorAll("[data-alert-tab-panel]"));
     let selectedRange = "24h";
     let selectedResolution = "auto";
+    let customHistoryActive = false;
     let selectedUnit = "F";
     let hoverX = null;
     let smoothingEnabled = true;
@@ -1548,12 +1576,16 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       currentEvents.forEach((event) => {
         const row = document.createElement("div");
         row.className = "ops-item";
+        const sampleContext = event.temp_f !== null && event.temp_f !== undefined
+          ? `${formatPrimaryTemperature(event.temp_f, event.temp_c)}${event.sample_status ? `, ${event.sample_status}` : ""}`
+          : (event.sample_status || "no sample context");
         row.innerHTML = `
           <div class="ops-item-top">
             <div class="ops-item-label">${event.label}</div>
             <div class="ops-item-time">${formatTimestamp(event.timestamp_utc)}</div>
           </div>
           <div class="ops-item-detail"><span class="event-badge">${event.event_type}</span> ${event.detail || ""}</div>
+          <div class="subtle">Captured at ${sampleContext}${event.sample_detail ? `, ${event.sample_detail}` : ""}</div>
         `;
         eventList.appendChild(row);
       });
@@ -2616,6 +2648,10 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
 
     async function refreshHistory() {
       const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
+      if (customHistoryActive && historyStart.value && historyEnd.value) {
+        params.set("start", new Date(historyStart.value).toISOString());
+        params.set("end", new Date(historyEnd.value).toISOString());
+      }
       const response = await fetch(`/api/history?${params.toString()}`);
       const payload = await response.json();
       drawChart(payload.samples, payload.profile_overlay || [], payload.events || []);
@@ -2628,7 +2664,10 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
             ? `${Math.round(payload.meta.bucket_seconds / 60)}m`
             : `${payload.meta.bucket_seconds}s`;
         const overlayLabel = (payload.profile_overlay || []).length ? ", profile overlay on" : "";
-        chartMeta.textContent = `${payload.meta.returned_samples} plotted from ${payload.meta.raw_rows} raw rows at ${resolutionLabel} buckets${overlayLabel}`;
+        const customLabel = payload.meta.start_utc && payload.meta.end_utc
+          ? `, ${formatTimestamp(payload.meta.start_utc)} to ${formatTimestamp(payload.meta.end_utc)}`
+          : "";
+        chartMeta.textContent = `${payload.meta.returned_samples} plotted from ${payload.meta.raw_rows} raw rows at ${resolutionLabel} buckets${overlayLabel}${customLabel}`;
       }
     }
 
@@ -2659,6 +2698,9 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     document.querySelectorAll("button[data-range]").forEach((button) => {
       button.addEventListener("click", async () => {
         selectedRange = button.dataset.range;
+        customHistoryActive = false;
+        historyStart.value = "";
+        historyEnd.value = "";
         populateResolutionOptions();
         document.querySelectorAll("button[data-range]").forEach((item) => {
           item.classList.toggle("active", item === button);
@@ -2676,6 +2718,22 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
 
     resolutionSelect.addEventListener("change", async () => {
       selectedResolution = resolutionSelect.value;
+      await refreshHistory();
+    });
+
+    applyHistoryFilterButton.addEventListener("click", async () => {
+      if (!historyStart.value || !historyEnd.value) {
+        chartMeta.textContent = "Set both start and end times to apply a custom history filter.";
+        return;
+      }
+      customHistoryActive = true;
+      await refreshHistory();
+    });
+
+    clearHistoryFilterButton.addEventListener("click", async () => {
+      customHistoryActive = false;
+      historyStart.value = "";
+      historyEnd.value = "";
       await refreshHistory();
     });
 
@@ -4389,10 +4447,11 @@ EVENTS_PAGE_HTML = """<!doctype html>
                 <th>Type</th>
                 <th>Label</th>
                 <th>Detail</th>
+                <th>Captured State</th>
               </tr>
             </thead>
             <tbody id="eventsTableBody">
-              <tr><td colspan="4" class="subtle">Loading events...</td></tr>
+              <tr><td colspan="5" class="subtle">Loading events...</td></tr>
             </tbody>
           </table>
         </div>
@@ -4416,17 +4475,21 @@ EVENTS_PAGE_HTML = """<!doctype html>
 
     function renderEvents(events) {
       if (!events.length) {
-        eventsTableBody.innerHTML = '<tr><td colspan="4" class="subtle">No events recorded yet.</td></tr>';
+        eventsTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No events recorded yet.</td></tr>';
         return;
       }
       eventsTableBody.innerHTML = "";
       events.forEach((item) => {
+        const capturedState = item.temp_f !== null && item.temp_f !== undefined
+          ? `${Number(item.temp_f).toFixed(1)} F / ${Number(item.temp_c).toFixed(1)} C`
+          : (item.sample_status || "no sample context");
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${formatTimestamp(item.timestamp_utc)}<div class="subtle">${item.sample_age}</div></td>
           <td><span class="pill">${item.event_type}</span></td>
           <td>${item.label}</td>
           <td>${item.detail || ""}</td>
+          <td>${capturedState}${item.sample_detail ? `<div class="subtle">${item.sample_detail}</div>` : ""}</td>
         `;
         eventsTableBody.appendChild(row);
       });
@@ -4712,10 +4775,11 @@ FAULTS_PAGE_HTML = """<!doctype html>
               <th>Time</th>
               <th>Temperature</th>
               <th>Detail</th>
+              <th>Fault Context</th>
             </tr>
           </thead>
           <tbody id="faultsTableBody">
-            <tr><td colspan="3" class="subtle">Loading faults...</td></tr>
+            <tr><td colspan="4" class="subtle">Loading faults...</td></tr>
           </tbody>
         </table>
       </div>
@@ -4764,16 +4828,42 @@ FAULTS_PAGE_HTML = """<!doctype html>
 
     function renderFaults(faults) {
       if (!faults.length) {
-        faultsTableBody.innerHTML = '<tr><td colspan="3" class="subtle">No faults in this window.</td></tr>';
+        faultsTableBody.innerHTML = '<tr><td colspan="4" class="subtle">No faults in this window.</td></tr>';
         return;
       }
       faultsTableBody.innerHTML = "";
       faults.forEach((fault) => {
+        const contextParts = [];
+        if (fault.error_streak !== null && fault.error_streak !== undefined) {
+          contextParts.push(`streak ${fault.error_streak}`);
+        }
+        if (fault.seconds_since_last_good !== null && fault.seconds_since_last_good !== undefined) {
+          contextParts.push(`${Number(fault.seconds_since_last_good).toFixed(0)}s since last good`);
+        }
+        if (fault.previous_good_temp_f !== null && fault.previous_good_temp_f !== undefined) {
+          contextParts.push(`prev ${Number(fault.previous_good_temp_f).toFixed(1)} F`);
+        }
+        if (fault.delta_from_previous_good_f !== null && fault.delta_from_previous_good_f !== undefined) {
+          contextParts.push(`delta ${Number(fault.delta_from_previous_good_f).toFixed(1)} F`);
+        }
+        if (fault.cold_junction_c !== null && fault.cold_junction_c !== undefined) {
+          contextParts.push(`CJ ${Number(fault.cold_junction_c).toFixed(1)} C`);
+        }
+        if (fault.sensor_model) {
+          contextParts.push(fault.sensor_model);
+        }
+        if (fault.thermocouple_type) {
+          contextParts.push(`Type ${fault.thermocouple_type}`);
+        }
+        if (fault.fault_flags) {
+          contextParts.push(`flags ${fault.fault_flags}`);
+        }
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${formatTimestamp(fault.timestamp_utc)}<div class="subtle">${fault.sample_age}</div></td>
           <td>${formatTemp(fault.temp_f, fault.temp_c)}</td>
           <td>${fault.detail || "fault"}</td>
+          <td>${contextParts.join(" • ") || "No extra context"}${fault.last_good_timestamp_utc ? `<div class="subtle">last good ${formatTimestamp(fault.last_good_timestamp_utc)}</div>` : ""}${fault.raw_frame_hex ? `<div class="subtle">frame ${fault.raw_frame_hex}${fault.fault_bits_hex ? ` • bits ${fault.fault_bits_hex}` : ""}</div>` : ""}</td>
         `;
         faultsTableBody.appendChild(row);
       });
@@ -5567,10 +5657,24 @@ def open_readwrite_connection() -> sqlite3.Connection:
             timestamp_utc TEXT NOT NULL,
             event_type TEXT NOT NULL,
             label TEXT NOT NULL,
-            detail TEXT NOT NULL DEFAULT ''
+            detail TEXT NOT NULL DEFAULT '',
+            temp_c REAL,
+            temp_f REAL,
+            sample_status TEXT,
+            sample_detail TEXT
         )
         """
     )
+    event_columns = connection.execute("PRAGMA table_info(kiln_events)").fetchall()
+    existing_event_names = {column["name"] for column in event_columns}
+    if "temp_c" not in existing_event_names:
+        connection.execute("ALTER TABLE kiln_events ADD COLUMN temp_c REAL")
+    if "temp_f" not in existing_event_names:
+        connection.execute("ALTER TABLE kiln_events ADD COLUMN temp_f REAL")
+    if "sample_status" not in existing_event_names:
+        connection.execute("ALTER TABLE kiln_events ADD COLUMN sample_status TEXT")
+    if "sample_detail" not in existing_event_names:
+        connection.execute("ALTER TABLE kiln_events ADD COLUMN sample_detail TEXT")
     connection.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_kiln_events_timestamp_utc
@@ -6048,9 +6152,18 @@ def fetch_window_events(connection: sqlite3.Connection, cutoff: str) -> list[dic
     if not table_exists(connection, "kiln_events"):
         return []
 
+    select_fields = "id, timestamp_utc, event_type, label, detail"
+    if table_has_column(connection, "kiln_events", "temp_c"):
+        select_fields += ", temp_c"
+    if table_has_column(connection, "kiln_events", "temp_f"):
+        select_fields += ", temp_f"
+    if table_has_column(connection, "kiln_events", "sample_status"):
+        select_fields += ", sample_status"
+    if table_has_column(connection, "kiln_events", "sample_detail"):
+        select_fields += ", sample_detail"
     rows = connection.execute(
-        """
-        SELECT id, timestamp_utc, event_type, label, detail
+        f"""
+        SELECT {select_fields}
         FROM kiln_events
         WHERE timestamp_utc >= ?
         ORDER BY timestamp_utc DESC, id DESC
@@ -6065,32 +6178,41 @@ def fetch_window_events(connection: sqlite3.Connection, cutoff: str) -> list[dic
             "event_type": row["event_type"],
             "label": row["label"],
             "detail": row["detail"],
+            "temp_c": row["temp_c"] if "temp_c" in row.keys() else None,
+            "temp_f": row["temp_f"] if "temp_f" in row.keys() else None,
+            "sample_status": row["sample_status"] if "sample_status" in row.keys() else None,
+            "sample_detail": row["sample_detail"] if "sample_detail" in row.keys() else None,
         }
         for row in rows
     ]
 
 
-def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str) -> dict:
+def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str, end_utc: str | None = None) -> dict:
+    end_clause = " AND timestamp_utc <= ?" if end_utc else ""
+    totals_params: tuple[object, ...] = (cutoff, end_utc) if end_utc else (cutoff,)
     totals = connection.execute(
-        """
+        f"""
         SELECT
             COUNT(*) AS total_samples,
             SUM(CASE WHEN status = 'ERROR' THEN 1 ELSE 0 END) AS fault_samples,
             SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) AS ok_samples
         FROM temperature_log
         WHERE timestamp_utc >= ?
+        {end_clause}
         """,
-        (cutoff,),
+        totals_params,
     ).fetchone()
 
+    streak_params: tuple[object, ...] = (cutoff, end_utc) if end_utc else (cutoff,)
     streak_rows = connection.execute(
-        """
+        f"""
         SELECT status
         FROM temperature_log
         WHERE timestamp_utc >= ?
+        {end_clause}
         ORDER BY id ASC
         """,
-        (cutoff,),
+        streak_params,
     ).fetchall()
     longest_fault_streak = 0
     running_streak = 0
@@ -6102,13 +6224,20 @@ def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str) -> dict
             running_streak = 0
 
     current_fault_streak = 0
+    current_where = "WHERE 1=1"
+    current_params: tuple[object, ...] = ()
+    if end_utc:
+        current_where = "WHERE timestamp_utc <= ?"
+        current_params = (end_utc,)
     current_rows = connection.execute(
-        """
+        f"""
         SELECT status
         FROM temperature_log
+        {current_where}
         ORDER BY id DESC
         LIMIT 250
-        """
+        """,
+        current_params,
     ).fetchall()
     for row in current_rows:
         if row["status"] == "ERROR":
@@ -6116,17 +6245,19 @@ def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str) -> dict
         else:
             break
 
+    detail_params: tuple[object, ...] = (cutoff, end_utc) if end_utc else (cutoff,)
     detail_rows = connection.execute(
-        """
+        f"""
         SELECT detail, COUNT(*) AS count
         FROM temperature_log
         WHERE timestamp_utc >= ?
+          {f"AND timestamp_utc <= ?" if end_utc else ""}
           AND status = 'ERROR'
         GROUP BY detail
         ORDER BY count DESC, detail ASC
         LIMIT 3
         """,
-        (cutoff,),
+        detail_params,
     ).fetchall()
 
     total_samples = int(totals["total_samples"] or 0)
@@ -6371,6 +6502,126 @@ def fetch_history(window_name: str) -> dict:
             "bucket_seconds": bucket_seconds,
             "returned_samples": len(rows),
             "raw_rows": raw_rows,
+        },
+    }
+
+
+def _auto_bucket_for_span(span_seconds: float) -> int:
+    if span_seconds <= 3600:
+        return 2
+    if span_seconds <= 6 * 3600:
+        return 30
+    if span_seconds <= 24 * 3600:
+        return 600
+    if span_seconds <= 3 * 24 * 3600:
+        return 1800
+    return 3600
+
+
+def fetch_history_between(start_dt: datetime, end_dt: datetime, resolution_name: str = "auto") -> dict:
+    if end_dt <= start_dt:
+        raise ValueError("end must be after start")
+
+    connection = open_readonly_connection()
+    if connection is None:
+        return {"range": "custom", "samples": [], "meta": None}
+
+    span_seconds = max(1.0, (end_dt - start_dt).total_seconds())
+    if resolution_name == "auto":
+        bucket_seconds = _auto_bucket_for_span(span_seconds)
+    else:
+        try:
+            bucket_seconds = int(resolution_name)
+        except ValueError:
+            bucket_seconds = _auto_bucket_for_span(span_seconds)
+        if bucket_seconds <= 0:
+            bucket_seconds = _auto_bucket_for_span(span_seconds)
+
+    start_iso = start_dt.isoformat()
+    end_iso = end_dt.isoformat()
+    try:
+        raw_rows = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM temperature_log
+            WHERE timestamp_utc >= ? AND timestamp_utc <= ?
+            """,
+            (start_iso, end_iso),
+        ).fetchone()[0]
+        rows = connection.execute(
+            """
+            SELECT
+                MIN(id) AS id,
+                MIN(timestamp_utc) AS timestamp_utc,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0
+                    THEN AVG(CASE WHEN status = 'OK' THEN temp_c END)
+                    ELSE NULL
+                END AS temp_c,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0
+                    THEN AVG(CASE WHEN status = 'OK' THEN temp_f END)
+                    ELSE NULL
+                END AS temp_f,
+                CASE
+                    WHEN SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) > 0 THEN 'OK'
+                    ELSE 'ERROR'
+                END AS status,
+                GROUP_CONCAT(DISTINCT CASE WHEN status = 'ERROR' THEN detail END) AS detail
+            FROM temperature_log
+            WHERE timestamp_utc >= ? AND timestamp_utc <= ?
+            GROUP BY CAST(strftime('%s', timestamp_utc) AS INTEGER) / ?
+            ORDER BY MIN(id) ASC
+            """,
+            (start_iso, end_iso, bucket_seconds),
+        ).fetchall()
+        active_run = fetch_active_profile_run(connection)
+        events = fetch_window_events(connection, start_iso)
+        events = [event for event in events if event["timestamp_utc"] <= end_iso]
+        diagnostics = build_fault_diagnostics(connection, start_iso, end_iso)
+    finally:
+        connection.close()
+
+    profile_overlay = []
+    if active_run:
+        profile = FiringProfile(
+            id=active_run["id"],
+            name=active_run["name"],
+            description=active_run["description"],
+            cone=active_run["cone"],
+            segments=[
+                ProfileSegment(
+                    name=segment["name"],
+                    target_temp_c=float(segment["target_temp_c"]),
+                    ramp_rate_c_per_hour=float(segment["ramp_rate_c_per_hour"]),
+                    soak_minutes=float(segment["soak_minutes"]),
+                )
+                for segment in active_run["segments"]
+            ],
+            created_at=active_run.get("created_at"),
+            updated_at=active_run.get("updated_at"),
+        )
+        profile_overlay = generate_profile_overlay(
+            profile,
+            datetime.fromisoformat(active_run["started_at"]),
+            float(active_run["start_temp_c"]),
+            start_dt,
+            end_dt,
+            bucket_seconds,
+        )
+
+    return {
+        "range": "custom",
+        "samples": [row_to_payload(row) for row in rows],
+        "profile_overlay": profile_overlay,
+        "events": events,
+        "diagnostics": diagnostics,
+        "meta": {
+            "bucket_seconds": bucket_seconds,
+            "returned_samples": len(rows),
+            "raw_rows": raw_rows,
+            "start_utc": start_iso,
+            "end_utc": end_iso,
         },
     }
 
@@ -6639,6 +6890,15 @@ def fetch_events(
         return {"events": []}
 
     try:
+        select_fields = "id, timestamp_utc, event_type, label, detail"
+        if table_has_column(connection, "kiln_events", "temp_c"):
+            select_fields += ", temp_c"
+        if table_has_column(connection, "kiln_events", "temp_f"):
+            select_fields += ", temp_f"
+        if table_has_column(connection, "kiln_events", "sample_status"):
+            select_fields += ", sample_status"
+        if table_has_column(connection, "kiln_events", "sample_detail"):
+            select_fields += ", sample_detail"
         clauses = []
         params: list[object] = []
         if event_type:
@@ -6657,7 +6917,7 @@ def fetch_events(
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         rows = connection.execute(
             f"""
-            SELECT id, timestamp_utc, event_type, label, detail
+            SELECT {select_fields}
             FROM kiln_events
             {where_sql}
             ORDER BY id DESC
@@ -6676,6 +6936,10 @@ def fetch_events(
                 "event_type": row["event_type"],
                 "label": row["label"],
                 "detail": row["detail"],
+                "temp_c": row["temp_c"] if "temp_c" in row.keys() else None,
+                "temp_f": row["temp_f"] if "temp_f" in row.keys() else None,
+                "sample_status": row["sample_status"] if "sample_status" in row.keys() else None,
+                "sample_detail": row["sample_detail"] if "sample_detail" in row.keys() else None,
                 "sample_age": format_sample_age(row["timestamp_utc"]),
             }
             for row in rows
@@ -6702,6 +6966,33 @@ def fetch_faults(
 
     cutoff = (datetime.now(timezone.utc) - HISTORY_WINDOWS[window_name]).isoformat()
     try:
+        select_fields = "id, timestamp_utc, temp_c, temp_f, detail"
+        if table_has_column(connection, "temperature_log", "cold_junction_c"):
+            select_fields += ", cold_junction_c"
+        if table_has_column(connection, "temperature_log", "sensor_model"):
+            select_fields += ", sensor_model"
+        if table_has_column(connection, "temperature_log", "thermocouple_type"):
+            select_fields += ", thermocouple_type"
+        if table_has_column(connection, "temperature_log", "previous_good_temp_c"):
+            select_fields += ", previous_good_temp_c"
+        if table_has_column(connection, "temperature_log", "previous_good_temp_f"):
+            select_fields += ", previous_good_temp_f"
+        if table_has_column(connection, "temperature_log", "delta_from_previous_good_c"):
+            select_fields += ", delta_from_previous_good_c"
+        if table_has_column(connection, "temperature_log", "delta_from_previous_good_f"):
+            select_fields += ", delta_from_previous_good_f"
+        if table_has_column(connection, "temperature_log", "error_streak"):
+            select_fields += ", error_streak"
+        if table_has_column(connection, "temperature_log", "seconds_since_last_good"):
+            select_fields += ", seconds_since_last_good"
+        if table_has_column(connection, "temperature_log", "last_good_timestamp_utc"):
+            select_fields += ", last_good_timestamp_utc"
+        if table_has_column(connection, "temperature_log", "raw_frame_hex"):
+            select_fields += ", raw_frame_hex"
+        if table_has_column(connection, "temperature_log", "fault_bits_hex"):
+            select_fields += ", fault_bits_hex"
+        if table_has_column(connection, "temperature_log", "fault_flags"):
+            select_fields += ", fault_flags"
         clauses = ["status = 'ERROR'"]
         params: list[object] = []
         effective_start = start or cutoff
@@ -6723,7 +7014,7 @@ def fetch_faults(
         where_sql = " AND ".join(clauses)
         rows = connection.execute(
             f"""
-            SELECT id, timestamp_utc, temp_c, temp_f, detail
+            SELECT {select_fields}
             FROM temperature_log
             WHERE {where_sql}
             ORDER BY id DESC
@@ -6744,6 +7035,19 @@ def fetch_faults(
                 "temp_c": row["temp_c"],
                 "temp_f": row["temp_f"],
                 "detail": row["detail"],
+                "cold_junction_c": row["cold_junction_c"] if "cold_junction_c" in row.keys() else None,
+                "sensor_model": row["sensor_model"] if "sensor_model" in row.keys() else None,
+                "thermocouple_type": row["thermocouple_type"] if "thermocouple_type" in row.keys() else None,
+                "previous_good_temp_c": row["previous_good_temp_c"] if "previous_good_temp_c" in row.keys() else None,
+                "previous_good_temp_f": row["previous_good_temp_f"] if "previous_good_temp_f" in row.keys() else None,
+                "delta_from_previous_good_c": row["delta_from_previous_good_c"] if "delta_from_previous_good_c" in row.keys() else None,
+                "delta_from_previous_good_f": row["delta_from_previous_good_f"] if "delta_from_previous_good_f" in row.keys() else None,
+                "error_streak": row["error_streak"] if "error_streak" in row.keys() else None,
+                "seconds_since_last_good": row["seconds_since_last_good"] if "seconds_since_last_good" in row.keys() else None,
+                "last_good_timestamp_utc": row["last_good_timestamp_utc"] if "last_good_timestamp_utc" in row.keys() else None,
+                "raw_frame_hex": row["raw_frame_hex"] if "raw_frame_hex" in row.keys() else None,
+                "fault_bits_hex": row["fault_bits_hex"] if "fault_bits_hex" in row.keys() else None,
+                "fault_flags": row["fault_flags"] if "fault_flags" in row.keys() else None,
                 "sample_age": format_sample_age(row["timestamp_utc"]),
             }
             for row in rows
@@ -7046,16 +7350,37 @@ def create_event_marker(payload: dict) -> dict:
     connection = open_readwrite_connection()
     try:
         timestamp_utc = datetime.now(timezone.utc).isoformat()
+        latest_sample = connection.execute(
+            """
+            SELECT temp_c, temp_f, status, detail
+            FROM temperature_log
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ).fetchone()
         connection.execute(
             """
             INSERT INTO kiln_events (
                 timestamp_utc,
                 event_type,
                 label,
-                detail
-            ) VALUES (?, ?, ?, ?)
+                detail,
+                temp_c,
+                temp_f,
+                sample_status,
+                sample_detail
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (timestamp_utc, event_type, label, detail),
+            (
+                timestamp_utc,
+                event_type,
+                label,
+                detail,
+                latest_sample["temp_c"] if latest_sample is not None and "temp_c" in latest_sample.keys() else None,
+                latest_sample["temp_f"] if latest_sample is not None and "temp_f" in latest_sample.keys() else None,
+                latest_sample["status"] if latest_sample is not None and "status" in latest_sample.keys() else None,
+                latest_sample["detail"] if latest_sample is not None and "detail" in latest_sample.keys() else None,
+            ),
         )
         connection.commit()
     finally:
@@ -7212,7 +7537,22 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             query = parse_qs(parsed_path.query)
             range_name = query.get("range", ["24h"])[0]
             resolution_name = query.get("resolution", ["auto"])[0]
-            self.send_json_response(fetch_history_with_resolution(range_name, resolution_name))
+            start_text = query.get("start", [""])[0].strip()
+            end_text = query.get("end", [""])[0].strip()
+            if start_text and end_text:
+                try:
+                    start_dt = datetime.fromisoformat(start_text.replace("Z", "+00:00"))
+                    end_dt = datetime.fromisoformat(end_text.replace("Z", "+00:00"))
+                except ValueError:
+                    self.send_json_response({"error": "Invalid start or end timestamp."}, status=400)
+                    return
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                self.send_json_response(fetch_history_between(start_dt, end_dt, resolution_name))
+            else:
+                self.send_json_response(fetch_history_with_resolution(range_name, resolution_name))
             return
 
         if parsed_path.path == "/api/alert-rules":

@@ -29,16 +29,47 @@ from storage.sqlite_logger import SQLiteLogger
 from utils.runtime import format_trend, setup_app_logger
 
 
-def build_error_sample(detail: str) -> TemperatureSample:
+def build_error_sample(error: SensorReadError | str) -> TemperatureSample:
     from datetime import datetime, timezone
 
+    detail = error.detail if isinstance(error, SensorReadError) else str(error)
     return TemperatureSample(
         timestamp=datetime.now(timezone.utc),
         temp_c=None,
         temp_f=None,
         status="ERROR",
         detail=detail,
+        raw_frame_hex=error.raw_frame_hex if isinstance(error, SensorReadError) else None,
+        fault_bits_hex=error.fault_bits_hex if isinstance(error, SensorReadError) else None,
+        fault_flags=error.fault_flags if isinstance(error, SensorReadError) else None,
     )
+
+
+def annotate_sample_context(
+    sample: TemperatureSample,
+    *,
+    previous_good_sample: TemperatureSample | None,
+    error_streak: int,
+    last_good_sample_at: datetime,
+) -> TemperatureSample:
+    sample.sensor_model = SENSOR_MODEL
+    sample.thermocouple_type = THERMOCOUPLE_TYPE
+    sample.error_streak = error_streak
+
+    if previous_good_sample is not None:
+        sample.previous_good_temp_c = previous_good_sample.temp_c
+        sample.previous_good_temp_f = previous_good_sample.temp_f
+        sample.last_good_timestamp_utc = previous_good_sample.timestamp.isoformat()
+        sample.seconds_since_last_good = max(
+            (sample.timestamp - last_good_sample_at).total_seconds(),
+            0.0,
+        )
+        if sample.temp_c is not None and previous_good_sample.temp_c is not None:
+            sample.delta_from_previous_good_c = sample.temp_c - previous_good_sample.temp_c
+        if sample.temp_f is not None and previous_good_sample.temp_f is not None:
+            sample.delta_from_previous_good_f = sample.temp_f - previous_good_sample.temp_f
+
+    return sample
 
 
 def persist_sample(storage: SQLiteLogger, sample: TemperatureSample, logger) -> None:
@@ -375,6 +406,7 @@ def run() -> int:
 
     logger.info("kiln monitor started")
     previous_temp_c = None
+    last_good_sample: TemperatureSample | None = None
     success_count = 0
     error_streak = 0
     last_good_sample_at = datetime.now(timezone.utc)
@@ -390,6 +422,12 @@ def run() -> int:
             try:
                 sample = sensor.read_sample()
                 reject_unrealistic_jump(sample, previous_temp_c)
+                sample = annotate_sample_context(
+                    sample,
+                    previous_good_sample=last_good_sample,
+                    error_streak=0,
+                    last_good_sample_at=last_good_sample_at,
+                )
                 persist_sample(storage, sample, logger)
                 watchdog_alerts = []
                 if watchdog_fault_active:
@@ -459,6 +497,7 @@ def run() -> int:
                 error_streak = 0
                 success_count += 1
                 last_good_sample_at = sample.timestamp
+                last_good_sample = sample
                 loop_completed_with_good_sample = True
 
                 if success_count % STATUS_EVERY_N_SAMPLES == 0:
@@ -473,7 +512,13 @@ def run() -> int:
                 previous_temp_c = sample.temp_c
             except SensorReadError as exc:
                 error_streak += 1
-                error_sample = build_error_sample(str(exc))
+                error_sample = build_error_sample(exc)
+                error_sample = annotate_sample_context(
+                    error_sample,
+                    previous_good_sample=last_good_sample,
+                    error_streak=error_streak,
+                    last_good_sample_at=last_good_sample_at,
+                )
                 persist_sample(storage, error_sample, logger)
                 watchdog_alerts = []
 

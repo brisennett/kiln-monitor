@@ -30,10 +30,36 @@ class SQLiteLogger:
                 temp_c REAL,
                 temp_f REAL,
                 status TEXT NOT NULL,
-                detail TEXT NOT NULL
+                detail TEXT NOT NULL,
+                cold_junction_c REAL,
+                sensor_model TEXT,
+                thermocouple_type TEXT,
+                previous_good_temp_c REAL,
+                previous_good_temp_f REAL,
+                delta_from_previous_good_c REAL,
+                delta_from_previous_good_f REAL,
+                error_streak INTEGER,
+                seconds_since_last_good REAL,
+                last_good_timestamp_utc TEXT,
+                raw_frame_hex TEXT,
+                fault_bits_hex TEXT,
+                fault_flags TEXT
             )
             """
         )
+        self._ensure_column("temperature_log", "cold_junction_c", "REAL")
+        self._ensure_column("temperature_log", "sensor_model", "TEXT")
+        self._ensure_column("temperature_log", "thermocouple_type", "TEXT")
+        self._ensure_column("temperature_log", "previous_good_temp_c", "REAL")
+        self._ensure_column("temperature_log", "previous_good_temp_f", "REAL")
+        self._ensure_column("temperature_log", "delta_from_previous_good_c", "REAL")
+        self._ensure_column("temperature_log", "delta_from_previous_good_f", "REAL")
+        self._ensure_column("temperature_log", "error_streak", "INTEGER")
+        self._ensure_column("temperature_log", "seconds_since_last_good", "REAL")
+        self._ensure_column("temperature_log", "last_good_timestamp_utc", "TEXT")
+        self._ensure_column("temperature_log", "raw_frame_hex", "TEXT")
+        self._ensure_column("temperature_log", "fault_bits_hex", "TEXT")
+        self._ensure_column("temperature_log", "fault_flags", "TEXT")
         self._connection.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_temperature_log_timestamp_utc
@@ -155,8 +181,21 @@ class SQLiteLogger:
                 temp_c,
                 temp_f,
                 status,
-                detail
-            ) VALUES (?, ?, ?, ?, ?)
+                detail,
+                cold_junction_c,
+                sensor_model,
+                thermocouple_type,
+                previous_good_temp_c,
+                previous_good_temp_f,
+                delta_from_previous_good_c,
+                delta_from_previous_good_f,
+                error_streak,
+                seconds_since_last_good,
+                last_good_timestamp_utc,
+                raw_frame_hex,
+                fault_bits_hex,
+                fault_flags
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sample.timestamp.isoformat(),
@@ -164,6 +203,19 @@ class SQLiteLogger:
                 sample.temp_f,
                 sample.status,
                 sample.detail,
+                sample.cold_junction_c,
+                sample.sensor_model,
+                sample.thermocouple_type,
+                sample.previous_good_temp_c,
+                sample.previous_good_temp_f,
+                sample.delta_from_previous_good_c,
+                sample.delta_from_previous_good_f,
+                sample.error_streak,
+                sample.seconds_since_last_good,
+                sample.last_good_timestamp_utc,
+                sample.raw_frame_hex,
+                sample.fault_bits_hex,
+                sample.fault_flags,
             ),
         )
         self._connection.commit()
