@@ -805,6 +805,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link active-page">Dashboard</a>
       <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link">Logs</a>
       <a href="/alerts" class="page-link">Alerts</a>
       <a href="/events" class="page-link">Events</a>
       <a href="/faults" class="page-link">Faults</a>
@@ -3338,6 +3339,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link">Dashboard</a>
       <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link">Logs</a>
       <a href="/alerts" class="page-link active-page">Alerts</a>
       <a href="/events" class="page-link">Events</a>
       <a href="/faults" class="page-link">Faults</a>
@@ -4362,6 +4364,7 @@ EVENTS_PAGE_HTML = """<!doctype html>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link">Dashboard</a>
       <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link">Logs</a>
       <a href="/alerts" class="page-link">Alerts</a>
       <a href="/events" class="page-link active-page">Events</a>
       <a href="/faults" class="page-link">Faults</a>
@@ -4712,6 +4715,7 @@ FAULTS_PAGE_HTML = """<!doctype html>
     <section class="page-nav" aria-label="Pages">
       <a href="/" class="page-link">Dashboard</a>
       <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link">Logs</a>
       <a href="/alerts" class="page-link">Alerts</a>
       <a href="/events" class="page-link">Events</a>
       <a href="/faults" class="page-link active-page">Faults</a>
@@ -4910,6 +4914,590 @@ FAULTS_PAGE_HTML = """<!doctype html>
 
     refreshFaults();
     setInterval(refreshFaults, 5000);
+  </script>
+</body>
+</html>
+"""
+
+FIRING_LOGS_PAGE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kiln Monitor Firing Logs</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      --bg: #081018;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      color: var(--text);
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
+    }
+    main {
+      max-width: 1480px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.48);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+      min-height: 44px;
+    }
+    .page-link.active-page {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .page-header, .toolbar, .button-row, .summary-strip {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .page-header {
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    .card {
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+    .label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .subtle {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .layout-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(360px, 520px) minmax(0, 1fr);
+      align-items: start;
+    }
+    .detail-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .form-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.66);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    button, .action-link {
+      border: 1px solid #334155;
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .action-link {
+      cursor: pointer;
+    }
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+      max-height: 560px;
+      overflow: auto;
+    }
+    .log-item {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.50);
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
+    .log-item.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .log-item-title {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.16);
+      color: #bae6fd;
+      margin-right: 6px;
+    }
+    .summary-tile {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 12px;
+      min-width: 150px;
+      background: rgba(15, 23, 42, 0.44);
+    }
+    .summary-value {
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+    .mini-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 340px;
+      overflow: auto;
+      margin-top: 12px;
+    }
+    .mini-item {
+      border-top: 1px solid rgba(148, 163, 184, 0.14);
+      padding-top: 10px;
+    }
+    .snapshot-link {
+      color: #7dd3fc;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .status-text {
+      min-height: 1.2em;
+      margin-top: 12px;
+      color: #86efac;
+    }
+    .error-text {
+      color: #fca5a5;
+    }
+    @media (max-width: 1040px) {
+      .layout-grid, .detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .page-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link active-page">Logs</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link">Faults</a>
+    </section>
+
+    <section class="page-header">
+      <div>
+        <h1>Firing Logs</h1>
+        <div class="subtle">Create a durable record for each firing with purpose, outcome, post-mortem, linked events, and linked photos.</div>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="refreshLogsButton">Refresh Logs</button>
+        <a id="exportMarkdownLink" class="action-link" href="#" hidden>Export Markdown</a>
+      </div>
+    </section>
+
+    <section class="layout-grid">
+      <section class="card">
+        <div class="label">Firing Log Editor</div>
+        <div class="subtle">Use one log per firing. The linked events and photos are copied into the firing log so the record survives even after historical raw data ages out.</div>
+        <form id="firingLogForm">
+          <div class="form-grid">
+            <div style="grid-column: 1 / -1;">
+              <label for="logTitle">Title</label>
+              <input id="logTitle" placeholder="Cone 6 glaze test with new thermocouple wire" required />
+            </div>
+            <div>
+              <label for="logFiringType">Firing Type</label>
+              <select id="logFiringType">
+                <option value="BISQUE">Bisque</option>
+                <option value="GLAZE">Glaze</option>
+                <option value="TEST">Test</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="logPlannedCone">Planned Cone</label>
+              <input id="logPlannedCone" placeholder="06, 6, etc." />
+            </div>
+            <div>
+              <label for="logResultStatus">Result</label>
+              <select id="logResultStatus">
+                <option value="PENDING">Pending</option>
+                <option value="SUCCESS">Success</option>
+                <option value="MIXED">Mixed</option>
+                <option value="FAILED">Failed</option>
+              </select>
+            </div>
+            <div>
+              <label for="logStartedAt">Start Time</label>
+              <input id="logStartedAt" type="datetime-local" required />
+            </div>
+            <div>
+              <label for="logEndedAt">End Time</label>
+              <input id="logEndedAt" type="datetime-local" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="logDescription">Description</label>
+              <textarea id="logDescription" placeholder="What was this firing trying to accomplish? What was loaded into the kiln?"></textarea>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="logResultSummary">Results</label>
+              <textarea id="logResultSummary" placeholder="How did it turn out? Note cone, finish, defects, color, and any practical result notes."></textarea>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="logPostMortem">Post-Mortem</label>
+              <textarea id="logPostMortem" placeholder="What worked, what failed, what changed, and what should happen before the next firing?"></textarea>
+            </div>
+          </div>
+          <div class="button-row" style="margin-top: 12px;">
+            <button type="submit" id="saveLogButton">Save Log</button>
+            <button type="button" id="newLogButton">New Log</button>
+            <button type="button" id="refreshLinkedDataButton">Refresh Events + Photos</button>
+          </div>
+          <div id="firingLogStatus" class="status-text"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="label">Saved Firing Logs</div>
+        <div class="subtle">Newest logs first. Click a log to load it into the editor and inspect its linked history.</div>
+        <div id="firingLogsList" class="log-list">
+          <div class="subtle">Loading logs...</div>
+        </div>
+      </section>
+    </section>
+
+    <section class="card">
+      <div class="label">Selected Log Summary</div>
+      <div class="summary-strip" id="logSummaryStrip">
+        <div class="summary-tile"><div class="label">Status</div><div class="summary-value">No log selected</div></div>
+      </div>
+    </section>
+
+    <section class="detail-grid">
+      <section class="card">
+        <div class="label">Linked Events</div>
+        <div class="subtle">This is the persistent event snapshot captured for the selected firing log.</div>
+        <div id="linkedEventsList" class="mini-list">
+          <div class="subtle">Select a firing log to inspect linked events.</div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="label">Linked Photos</div>
+        <div class="subtle">Archived snapshots captured during the firing window are copied into the firing log record.</div>
+        <div id="linkedPhotosList" class="mini-list">
+          <div class="subtle">Select a firing log to inspect linked photos.</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const firingLogForm = document.getElementById("firingLogForm");
+    const firingLogsList = document.getElementById("firingLogsList");
+    const firingLogStatus = document.getElementById("firingLogStatus");
+    const logSummaryStrip = document.getElementById("logSummaryStrip");
+    const linkedEventsList = document.getElementById("linkedEventsList");
+    const linkedPhotosList = document.getElementById("linkedPhotosList");
+    const exportMarkdownLink = document.getElementById("exportMarkdownLink");
+    let selectedLogId = null;
+
+    function formatTimestamp(isoText) {
+      if (!isoText) return "--";
+      return new Date(isoText).toLocaleString();
+    }
+
+    function toLocalInputValue(isoText) {
+      if (!isoText) return "";
+      const value = new Date(isoText);
+      const pad = (input) => String(input).padStart(2, "0");
+      return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+    }
+
+    function fromLocalInputValue(value) {
+      return value ? new Date(value).toISOString() : null;
+    }
+
+    function clearEditor() {
+      selectedLogId = null;
+      firingLogForm.reset();
+      document.getElementById("logFiringType").value = "BISQUE";
+      document.getElementById("logResultStatus").value = "PENDING";
+      firingLogStatus.textContent = "";
+      exportMarkdownLink.hidden = true;
+      exportMarkdownLink.removeAttribute("href");
+      linkedEventsList.innerHTML = '<div class="subtle">Select a firing log to inspect linked events.</div>';
+      linkedPhotosList.innerHTML = '<div class="subtle">Select a firing log to inspect linked photos.</div>';
+      logSummaryStrip.innerHTML = '<div class="summary-tile"><div class="label">Status</div><div class="summary-value">New log</div></div>';
+      document.querySelectorAll(".log-item").forEach((item) => item.classList.remove("active"));
+    }
+
+    function renderLogs(logs) {
+      if (!logs.length) {
+        firingLogsList.innerHTML = '<div class="subtle">No firing logs yet.</div>';
+        return;
+      }
+      firingLogsList.innerHTML = "";
+      logs.forEach((log) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = `log-item${selectedLogId === log.id ? " active" : ""}`;
+        item.dataset.logId = String(log.id);
+        item.innerHTML = `
+          <div class="log-item-title">${log.title}</div>
+          <div style="margin-top: 6px;">
+            <span class="pill">${log.firing_type || "OTHER"}</span>
+            <span class="pill">${log.result_status || "PENDING"}</span>
+          </div>
+          <div class="subtle" style="margin-top: 8px;">${formatTimestamp(log.started_at_utc)}${log.ended_at_utc ? ` to ${formatTimestamp(log.ended_at_utc)}` : ""}</div>
+          <div class="subtle">${log.event_count} events • ${log.snapshot_count} photos</div>
+        `;
+        item.addEventListener("click", async () => {
+          await loadLog(log.id);
+        });
+        firingLogsList.appendChild(item);
+      });
+    }
+
+    function renderSelectedLog(log) {
+      document.getElementById("logTitle").value = log.title || "";
+      document.getElementById("logFiringType").value = log.firing_type || "OTHER";
+      document.getElementById("logPlannedCone").value = log.planned_cone || "";
+      document.getElementById("logResultStatus").value = log.result_status || "PENDING";
+      document.getElementById("logStartedAt").value = toLocalInputValue(log.started_at_utc);
+      document.getElementById("logEndedAt").value = toLocalInputValue(log.ended_at_utc);
+      document.getElementById("logDescription").value = log.description || "";
+      document.getElementById("logResultSummary").value = log.result_summary || "";
+      document.getElementById("logPostMortem").value = log.post_mortem || "";
+      exportMarkdownLink.hidden = false;
+      exportMarkdownLink.href = `/api/firing-logs/${log.id}/export.md`;
+      logSummaryStrip.innerHTML = `
+        <div class="summary-tile"><div class="label">Type</div><div class="summary-value">${log.firing_type || "OTHER"}</div></div>
+        <div class="summary-tile"><div class="label">Result</div><div class="summary-value">${log.result_status || "PENDING"}</div></div>
+        <div class="summary-tile"><div class="label">Events</div><div class="summary-value">${Number(log.event_count || 0)}</div></div>
+        <div class="summary-tile"><div class="label">Photos</div><div class="summary-value">${Number(log.snapshot_count || 0)}</div></div>
+        <div class="summary-tile"><div class="label">Created</div><div class="summary-value">${formatTimestamp(log.created_at)}</div></div>
+      `;
+    }
+
+    function renderLinkedEvents(events) {
+      if (!events.length) {
+        linkedEventsList.innerHTML = '<div class="subtle">No linked events captured for this firing log yet.</div>';
+        return;
+      }
+      linkedEventsList.innerHTML = "";
+      events.forEach((event) => {
+        const item = document.createElement("div");
+        item.className = "mini-item";
+        const captured = event.temp_f !== null && event.temp_f !== undefined
+          ? `${Number(event.temp_f).toFixed(1)} F / ${Number(event.temp_c).toFixed(1)} C`
+          : (event.sample_status || "no sample context");
+        item.innerHTML = `
+          <div><span class="pill">${event.event_type}</span> ${event.label}</div>
+          <div class="subtle">${formatTimestamp(event.timestamp_utc)}</div>
+          <div>${event.detail || ""}</div>
+          <div class="subtle">Captured state: ${captured}${event.sample_detail ? ` • ${event.sample_detail}` : ""}</div>
+        `;
+        linkedEventsList.appendChild(item);
+      });
+    }
+
+    function renderLinkedPhotos(photos) {
+      if (!photos.length) {
+        linkedPhotosList.innerHTML = '<div class="subtle">No linked photos captured for this firing log yet.</div>';
+        return;
+      }
+      linkedPhotosList.innerHTML = "";
+      photos.forEach((photo) => {
+        const item = document.createElement("div");
+        item.className = "mini-item";
+        item.innerHTML = `
+          <div><a class="snapshot-link" href="/camera/archive/${encodeURIComponent(photo.filename)}" target="_blank" rel="noopener noreferrer">${photo.filename}</a></div>
+          <div class="subtle">${formatTimestamp(photo.captured_at_utc)}</div>
+          <div>${photo.caption || ""}</div>
+        `;
+        linkedPhotosList.appendChild(item);
+      });
+    }
+
+    async function refreshLogs() {
+      const response = await fetch("/api/firing-logs");
+      const payload = await response.json();
+      renderLogs(payload.logs || []);
+      if (selectedLogId && (payload.logs || []).some((log) => log.id === selectedLogId)) {
+        await loadLog(selectedLogId, false);
+      }
+    }
+
+    async function loadLog(logId, updateList = true) {
+      const response = await fetch(`/api/firing-logs/${logId}`);
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to load firing log.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      selectedLogId = logId;
+      firingLogStatus.textContent = "";
+      firingLogStatus.classList.remove("error-text");
+      renderSelectedLog(payload.log);
+      renderLinkedEvents(payload.events || []);
+      renderLinkedPhotos(payload.snapshots || []);
+      if (updateList) {
+        await refreshLogs();
+      } else {
+        document.querySelectorAll(".log-item").forEach((item) => item.classList.remove("active"));
+        const matched = Array.from(document.querySelectorAll(".log-item")).find((item) => item.dataset.logId === String(payload.log.id));
+        if (matched) {
+          matched.classList.add("active");
+        }
+      }
+    }
+
+    firingLogForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      firingLogStatus.textContent = "Saving firing log...";
+      firingLogStatus.classList.remove("error-text");
+      const body = {
+        title: document.getElementById("logTitle").value.trim(),
+        firing_type: document.getElementById("logFiringType").value,
+        planned_cone: document.getElementById("logPlannedCone").value.trim(),
+        result_status: document.getElementById("logResultStatus").value,
+        started_at_utc: fromLocalInputValue(document.getElementById("logStartedAt").value),
+        ended_at_utc: fromLocalInputValue(document.getElementById("logEndedAt").value),
+        description: document.getElementById("logDescription").value.trim(),
+        result_summary: document.getElementById("logResultSummary").value.trim(),
+        post_mortem: document.getElementById("logPostMortem").value.trim(),
+      };
+      const url = selectedLogId ? `/api/firing-logs/${selectedLogId}` : "/api/firing-logs";
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to save firing log.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      selectedLogId = payload.id;
+      firingLogStatus.textContent = selectedLogId ? "Firing log saved." : "Firing log created.";
+      await refreshLogs();
+      if (selectedLogId) {
+        await loadLog(selectedLogId);
+      }
+    });
+
+    document.getElementById("refreshLogsButton").addEventListener("click", async () => {
+      await refreshLogs();
+    });
+
+    document.getElementById("newLogButton").addEventListener("click", () => {
+      clearEditor();
+    });
+
+    document.getElementById("refreshLinkedDataButton").addEventListener("click", async () => {
+      if (!selectedLogId) {
+        firingLogStatus.textContent = "Save the firing log first so events and photos can be linked.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      firingLogStatus.textContent = "Refreshing linked events and photos...";
+      firingLogStatus.classList.remove("error-text");
+      const response = await fetch(`/api/firing-logs/${selectedLogId}/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to refresh linked data.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      firingLogStatus.textContent = "Linked events and photos refreshed.";
+      await loadLog(selectedLogId);
+      await refreshLogs();
+    });
+
+    clearEditor();
+    refreshLogs();
   </script>
 </body>
 </html>
@@ -5296,6 +5884,7 @@ PANEL_PAGE_HTML = """<!doctype html>
 
     <section class="helper-row">
       <button type="button" id="resetFaultsButton" class="secondary-button">Reset Faults</button>
+      <a href="/logs" class="page-link">Logs</a>
       <a href="/alerts" class="page-link">Admin Pages</a>
     </section>
 
@@ -5550,6 +6139,31 @@ def format_sample_age(timestamp_utc: str) -> str:
     return f"{int(age_seconds // 3600)}h {int((age_seconds % 3600) // 60)}m"
 
 
+def normalize_iso_utc(timestamp_text: str | None) -> str | None:
+    if timestamp_text is None:
+        return None
+    cleaned = str(timestamp_text).strip()
+    if not cleaned:
+        return None
+    parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def parse_snapshot_captured_at(snapshot: dict) -> datetime | None:
+    captured_at = snapshot.get("captured_at")
+    if not captured_at:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
     row = connection.execute(
         """
@@ -5679,6 +6293,72 @@ def open_readwrite_connection() -> sqlite3.Connection:
         """
         CREATE INDEX IF NOT EXISTS idx_kiln_events_timestamp_utc
         ON kiln_events(timestamp_utc)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS firing_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            firing_type TEXT NOT NULL DEFAULT 'OTHER',
+            planned_cone TEXT NOT NULL DEFAULT '',
+            started_at_utc TEXT NOT NULL,
+            ended_at_utc TEXT,
+            description TEXT NOT NULL DEFAULT '',
+            result_summary TEXT NOT NULL DEFAULT '',
+            result_status TEXT NOT NULL DEFAULT 'PENDING',
+            post_mortem TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS firing_log_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            firing_log_id INTEGER NOT NULL,
+            event_id INTEGER,
+            timestamp_utc TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            label TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT '',
+            temp_c REAL,
+            temp_f REAL,
+            sample_status TEXT,
+            sample_detail TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS firing_log_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            firing_log_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            captured_at_utc TEXT,
+            caption TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_firing_logs_started_at_utc
+        ON firing_logs(started_at_utc)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_firing_log_events_log_id
+        ON firing_log_events(firing_log_id, timestamp_utc)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_firing_log_snapshots_log_id
+        ON firing_log_snapshots(firing_log_id, captured_at_utc)
         """
     )
     connection.commit()
@@ -6875,6 +7555,461 @@ def fetch_recent_alerts(limit: int = 6) -> dict:
     }
 
 
+def parse_firing_log_payload(payload: dict) -> dict:
+    title = str(payload.get("title", "")).strip()
+    if not title:
+        raise ValueError("firing log title is required")
+
+    started_at_utc = normalize_iso_utc(payload.get("started_at_utc"))
+    if not started_at_utc:
+        raise ValueError("start time is required")
+
+    ended_at_utc = normalize_iso_utc(payload.get("ended_at_utc"))
+    if ended_at_utc and ended_at_utc < started_at_utc:
+        raise ValueError("end time must be after start time")
+
+    firing_type = str(payload.get("firing_type", "OTHER")).strip().upper() or "OTHER"
+    result_status = str(payload.get("result_status", "PENDING")).strip().upper() or "PENDING"
+
+    return {
+        "title": title,
+        "firing_type": firing_type,
+        "planned_cone": str(payload.get("planned_cone", "")).strip(),
+        "started_at_utc": started_at_utc,
+        "ended_at_utc": ended_at_utc,
+        "description": str(payload.get("description", "")).strip(),
+        "result_summary": str(payload.get("result_summary", "")).strip(),
+        "result_status": result_status,
+        "post_mortem": str(payload.get("post_mortem", "")).strip(),
+    }
+
+
+def sync_firing_log_related_data(
+    connection: sqlite3.Connection,
+    firing_log_id: int,
+    *,
+    started_at_utc: str,
+    ended_at_utc: str | None,
+) -> None:
+    sync_cutoff = ended_at_utc or datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+
+    connection.execute("DELETE FROM firing_log_events WHERE firing_log_id = ?", (firing_log_id,))
+    connection.execute("DELETE FROM firing_log_snapshots WHERE firing_log_id = ?", (firing_log_id,))
+
+    if table_exists(connection, "kiln_events"):
+        select_fields = "id, timestamp_utc, event_type, label, detail"
+        if table_has_column(connection, "kiln_events", "temp_c"):
+            select_fields += ", temp_c"
+        if table_has_column(connection, "kiln_events", "temp_f"):
+            select_fields += ", temp_f"
+        if table_has_column(connection, "kiln_events", "sample_status"):
+            select_fields += ", sample_status"
+        if table_has_column(connection, "kiln_events", "sample_detail"):
+            select_fields += ", sample_detail"
+        rows = connection.execute(
+            f"""
+            SELECT {select_fields}
+            FROM kiln_events
+            WHERE timestamp_utc >= ? AND timestamp_utc <= ?
+            ORDER BY timestamp_utc ASC, id ASC
+            """,
+            (started_at_utc, sync_cutoff),
+        ).fetchall()
+        for row in rows:
+            connection.execute(
+                """
+                INSERT INTO firing_log_events (
+                    firing_log_id,
+                    event_id,
+                    timestamp_utc,
+                    event_type,
+                    label,
+                    detail,
+                    temp_c,
+                    temp_f,
+                    sample_status,
+                    sample_detail,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    firing_log_id,
+                    row["id"],
+                    row["timestamp_utc"],
+                    row["event_type"],
+                    row["label"],
+                    row["detail"],
+                    row["temp_c"] if "temp_c" in row.keys() else None,
+                    row["temp_f"] if "temp_f" in row.keys() else None,
+                    row["sample_status"] if "sample_status" in row.keys() else None,
+                    row["sample_detail"] if "sample_detail" in row.keys() else None,
+                    now,
+                ),
+            )
+
+    for snapshot in list_recent_snapshots(limit=5000):
+        captured_at = parse_snapshot_captured_at(snapshot)
+        if captured_at is None:
+            continue
+        captured_iso = captured_at.isoformat()
+        if captured_iso < started_at_utc or captured_iso > sync_cutoff:
+            continue
+        connection.execute(
+            """
+            INSERT INTO firing_log_snapshots (
+                firing_log_id,
+                filename,
+                captured_at_utc,
+                caption,
+                created_at
+            ) VALUES (?, ?, ?, '', ?)
+            """,
+            (
+                firing_log_id,
+                snapshot["filename"],
+                captured_iso,
+                now,
+            ),
+        )
+
+
+def fetch_firing_logs(limit: int = 100) -> dict:
+    connection = open_readonly_connection()
+    if connection is None or not table_exists(connection, "firing_logs"):
+        if connection is not None:
+            connection.close()
+        return {"logs": []}
+
+    try:
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                title,
+                firing_type,
+                planned_cone,
+                started_at_utc,
+                ended_at_utc,
+                description,
+                result_summary,
+                result_status,
+                post_mortem,
+                created_at,
+                updated_at,
+                (SELECT COUNT(*) FROM firing_log_events WHERE firing_log_id = firing_logs.id) AS event_count,
+                (SELECT COUNT(*) FROM firing_log_snapshots WHERE firing_log_id = firing_logs.id) AS snapshot_count
+            FROM firing_logs
+            ORDER BY started_at_utc DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return {
+        "logs": [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "firing_type": row["firing_type"],
+                "planned_cone": row["planned_cone"],
+                "started_at_utc": row["started_at_utc"],
+                "ended_at_utc": row["ended_at_utc"],
+                "description": row["description"],
+                "result_summary": row["result_summary"],
+                "result_status": row["result_status"],
+                "post_mortem": row["post_mortem"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "event_count": int(row["event_count"] or 0),
+                "snapshot_count": int(row["snapshot_count"] or 0),
+            }
+            for row in rows
+        ]
+    }
+
+
+def fetch_firing_log_detail(firing_log_id: int) -> dict:
+    connection = open_readonly_connection()
+    if connection is None or not table_exists(connection, "firing_logs"):
+        if connection is not None:
+            connection.close()
+        raise ValueError("firing log not found")
+
+    try:
+        row = connection.execute(
+            """
+            SELECT
+                id,
+                title,
+                firing_type,
+                planned_cone,
+                started_at_utc,
+                ended_at_utc,
+                description,
+                result_summary,
+                result_status,
+                post_mortem,
+                created_at,
+                updated_at,
+                (SELECT COUNT(*) FROM firing_log_events WHERE firing_log_id = firing_logs.id) AS event_count,
+                (SELECT COUNT(*) FROM firing_log_snapshots WHERE firing_log_id = firing_logs.id) AS snapshot_count
+            FROM firing_logs
+            WHERE id = ?
+            """,
+            (firing_log_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("firing log not found")
+
+        event_rows = connection.execute(
+            """
+            SELECT
+                id,
+                event_id,
+                timestamp_utc,
+                event_type,
+                label,
+                detail,
+                temp_c,
+                temp_f,
+                sample_status,
+                sample_detail
+            FROM firing_log_events
+            WHERE firing_log_id = ?
+            ORDER BY timestamp_utc ASC, id ASC
+            """,
+            (firing_log_id,),
+        ).fetchall()
+        snapshot_rows = connection.execute(
+            """
+            SELECT id, filename, captured_at_utc, caption
+            FROM firing_log_snapshots
+            WHERE firing_log_id = ?
+            ORDER BY captured_at_utc ASC, id ASC
+            """,
+            (firing_log_id,),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return {
+        "log": {
+            "id": row["id"],
+            "title": row["title"],
+            "firing_type": row["firing_type"],
+            "planned_cone": row["planned_cone"],
+            "started_at_utc": row["started_at_utc"],
+            "ended_at_utc": row["ended_at_utc"],
+            "description": row["description"],
+            "result_summary": row["result_summary"],
+            "result_status": row["result_status"],
+            "post_mortem": row["post_mortem"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "event_count": int(row["event_count"] or 0),
+            "snapshot_count": int(row["snapshot_count"] or 0),
+        },
+        "events": [
+            {
+                "id": event_row["id"],
+                "event_id": event_row["event_id"],
+                "timestamp_utc": event_row["timestamp_utc"],
+                "event_type": event_row["event_type"],
+                "label": event_row["label"],
+                "detail": event_row["detail"],
+                "temp_c": event_row["temp_c"],
+                "temp_f": event_row["temp_f"],
+                "sample_status": event_row["sample_status"],
+                "sample_detail": event_row["sample_detail"],
+            }
+            for event_row in event_rows
+        ],
+        "snapshots": [
+            {
+                "id": snapshot_row["id"],
+                "filename": snapshot_row["filename"],
+                "captured_at_utc": snapshot_row["captured_at_utc"],
+                "caption": snapshot_row["caption"],
+                "url": f"/camera/archive/{snapshot_row['filename']}",
+            }
+            for snapshot_row in snapshot_rows
+        ],
+    }
+
+
+def create_firing_log(payload: dict) -> dict:
+    parsed = parse_firing_log_payload(payload)
+    now = datetime.now(timezone.utc).isoformat()
+    connection = open_readwrite_connection()
+    try:
+        cursor = connection.execute(
+            """
+            INSERT INTO firing_logs (
+                title,
+                firing_type,
+                planned_cone,
+                started_at_utc,
+                ended_at_utc,
+                description,
+                result_summary,
+                result_status,
+                post_mortem,
+                created_at,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                parsed["title"],
+                parsed["firing_type"],
+                parsed["planned_cone"],
+                parsed["started_at_utc"],
+                parsed["ended_at_utc"],
+                parsed["description"],
+                parsed["result_summary"],
+                parsed["result_status"],
+                parsed["post_mortem"],
+                now,
+                now,
+            ),
+        )
+        firing_log_id = int(cursor.lastrowid)
+        sync_firing_log_related_data(
+            connection,
+            firing_log_id,
+            started_at_utc=parsed["started_at_utc"],
+            ended_at_utc=parsed["ended_at_utc"],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True, "id": firing_log_id}
+
+
+def update_firing_log(firing_log_id: int, payload: dict) -> dict:
+    parsed = parse_firing_log_payload(payload)
+    now = datetime.now(timezone.utc).isoformat()
+    connection = open_readwrite_connection()
+    try:
+        current = connection.execute(
+            "SELECT id FROM firing_logs WHERE id = ?",
+            (firing_log_id,),
+        ).fetchone()
+        if current is None:
+            raise ValueError("firing log not found")
+        connection.execute(
+            """
+            UPDATE firing_logs
+            SET title = ?, firing_type = ?, planned_cone = ?, started_at_utc = ?, ended_at_utc = ?,
+                description = ?, result_summary = ?, result_status = ?, post_mortem = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                parsed["title"],
+                parsed["firing_type"],
+                parsed["planned_cone"],
+                parsed["started_at_utc"],
+                parsed["ended_at_utc"],
+                parsed["description"],
+                parsed["result_summary"],
+                parsed["result_status"],
+                parsed["post_mortem"],
+                now,
+                firing_log_id,
+            ),
+        )
+        sync_firing_log_related_data(
+            connection,
+            firing_log_id,
+            started_at_utc=parsed["started_at_utc"],
+            ended_at_utc=parsed["ended_at_utc"],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True, "id": firing_log_id}
+
+
+def refresh_firing_log_related_data(firing_log_id: int) -> dict:
+    connection = open_readwrite_connection()
+    try:
+        row = connection.execute(
+            "SELECT started_at_utc, ended_at_utc FROM firing_logs WHERE id = ?",
+            (firing_log_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("firing log not found")
+        sync_firing_log_related_data(
+            connection,
+            firing_log_id,
+            started_at_utc=row["started_at_utc"],
+            ended_at_utc=row["ended_at_utc"],
+        )
+        connection.execute(
+            "UPDATE firing_logs SET updated_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), firing_log_id),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return {"ok": True, "id": firing_log_id}
+
+
+def build_firing_log_markdown(firing_log_id: int) -> str:
+    detail = fetch_firing_log_detail(firing_log_id)
+    log = detail["log"]
+    events = detail["events"]
+    snapshots = detail["snapshots"]
+    lines = [
+        f"# {log['title']}",
+        "",
+        f"- Type: {log['firing_type']}",
+        f"- Planned cone: {log['planned_cone'] or 'n/a'}",
+        f"- Result: {log['result_status']}",
+        f"- Start: {log['started_at_utc']}",
+        f"- End: {log['ended_at_utc'] or 'in progress'}",
+        f"- Linked events: {log['event_count']}",
+        f"- Linked photos: {log['snapshot_count']}",
+        "",
+        "## Description",
+        "",
+        log["description"] or "None recorded.",
+        "",
+        "## Results",
+        "",
+        log["result_summary"] or "None recorded.",
+        "",
+        "## Post-Mortem",
+        "",
+        log["post_mortem"] or "None recorded.",
+        "",
+        "## Events",
+        "",
+    ]
+    if events:
+        for event in events:
+            state_parts = []
+            if event["temp_f"] is not None:
+                state_parts.append(f"{float(event['temp_f']):.1f} F")
+            if event["sample_status"]:
+                state_parts.append(event["sample_status"])
+            state_text = f" ({', '.join(state_parts)})" if state_parts else ""
+            detail_text = f": {event['detail']}" if event["detail"] else ""
+            lines.append(f"- {event['timestamp_utc']} [{event['event_type']}] {event['label']}{state_text}{detail_text}")
+    else:
+        lines.append("- None recorded.")
+    lines.extend(["", "## Photos", ""])
+    if snapshots:
+        for snapshot in snapshots:
+            lines.append(f"- {snapshot['captured_at_utc'] or 'unknown time'}: {snapshot['filename']}")
+    else:
+        lines.append("- None recorded.")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def fetch_events(
     limit: int = 100,
     *,
@@ -7473,6 +8608,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_text_response(DASHBOARD_PAGE_HTML, content_type="text/html; charset=utf-8")
             return
 
+        if parsed_path.path == "/logs":
+            self.send_text_response(FIRING_LOGS_PAGE_HTML, content_type="text/html; charset=utf-8")
+            return
+
         if parsed_path.path == "/alerts":
             self.send_text_response(ALERTS_PAGE_HTML, content_type="text/html; charset=utf-8")
             return
@@ -7565,6 +8704,23 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if parsed_path.path == "/api/recent-alerts":
             self.send_json_response(fetch_recent_alerts())
+            return
+
+        if parsed_path.path == "/api/firing-logs":
+            query = parse_qs(parsed_path.query)
+            limit = int(query.get("limit", ["100"])[0])
+            self.send_json_response(fetch_firing_logs(limit=max(1, min(limit, 500))))
+            return
+
+        if parsed_path.path.startswith("/api/firing-logs/") and parsed_path.path.endswith("/export.md"):
+            firing_log_id = int(parsed_path.path.split("/")[3])
+            markdown_body = build_firing_log_markdown(firing_log_id)
+            self.send_text_response(markdown_body, content_type="text/markdown; charset=utf-8")
+            return
+
+        if parsed_path.path.startswith("/api/firing-logs/"):
+            firing_log_id = int(parsed_path.path.split("/")[3])
+            self.send_json_response(fetch_firing_log_detail(firing_log_id))
             return
 
         if parsed_path.path == "/api/events":
@@ -7667,6 +8823,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(create_profile(payload))
                 return
 
+            if parsed_path.path == "/api/firing-logs":
+                self.send_json_response(create_firing_log(payload))
+                return
+
             if parsed_path.path == "/api/events":
                 self.send_json_response(create_event_marker(payload))
                 return
@@ -7711,9 +8871,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(activate_profile(profile_id))
                 return
 
+            if parsed_path.path.startswith("/api/firing-logs/") and parsed_path.path.endswith("/refresh"):
+                firing_log_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(refresh_firing_log_related_data(firing_log_id))
+                return
+
             if parsed_path.path.startswith("/api/alert-rules/"):
                 rule_id = int(parsed_path.path.split("/")[3])
                 self.send_json_response(update_alert_rule(rule_id, payload))
+                return
+
+            if parsed_path.path.startswith("/api/firing-logs/"):
+                firing_log_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(update_firing_log(firing_log_id, payload))
                 return
 
             if parsed_path.path.startswith("/api/profiles/"):
