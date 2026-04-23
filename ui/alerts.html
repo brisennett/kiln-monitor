@@ -684,6 +684,29 @@
 
     const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText);
 
+    function setStatusMessage(element, message, isError = false) {
+      if (!element) {
+        return;
+      }
+      element.textContent = message;
+      element.classList.toggle("success-text", !isError);
+      element.classList.toggle("error-text", isError);
+    }
+
+    async function runActionWithStatus(element, pendingMessage, action, successMessage = null) {
+      setStatusMessage(element, pendingMessage, false);
+      try {
+        const result = await action();
+        if (successMessage !== null) {
+          setStatusMessage(element, successMessage, false);
+        }
+        return result;
+      } catch (error) {
+        setStatusMessage(element, error instanceof Error ? error.message : String(error), true);
+        return null;
+      }
+    }
+
     function formatRuleTemperature(tempF) {
       if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
         return "--";
@@ -945,28 +968,32 @@
 
       rulesTableBody.querySelectorAll("[data-clone]").forEach((button) => {
         button.addEventListener("click", async () => {
-          const response = await fetch(`/api/alert-rules/${button.dataset.clone}/clone`, { method: "POST" });
-          const result = await response.json();
-          if (!response.ok) {
-            ruleError.textContent = result.error || "Failed to clone alert rule.";
-            return;
-          }
-          await refreshAlertRules();
+          await runActionWithStatus(
+            ruleError,
+            "Cloning alert rule...",
+            async () => {
+              await window.KilnUI.postJson(`/api/alert-rules/${button.dataset.clone}/clone`);
+              await refreshAlertRules();
+            },
+            "Alert rule cloned.",
+          );
         });
       });
 
       rulesTableBody.querySelectorAll("[data-delete]").forEach((button) => {
         button.addEventListener("click", async () => {
-          const response = await fetch(`/api/alert-rules/${button.dataset.delete}/delete`, { method: "POST" });
-          const result = await response.json();
-          if (!response.ok) {
-            ruleError.textContent = result.error || "Failed to delete alert rule.";
-            return;
-          }
-          if (editingRuleId === Number(button.dataset.delete)) {
-            resetRuleForm();
-          }
-          await refreshAlertRules();
+          await runActionWithStatus(
+            ruleError,
+            "Deleting alert rule...",
+            async () => {
+              await window.KilnUI.postJson(`/api/alert-rules/${button.dataset.delete}/delete`);
+              if (editingRuleId === Number(button.dataset.delete)) {
+                resetRuleForm();
+              }
+              await refreshAlertRules();
+            },
+            "Alert rule deleted.",
+          );
         });
       });
     }
@@ -1015,21 +1042,16 @@
     }
 
     async function saveAlertChannelSettings() {
-      channelSettingsStatus.textContent = "Saving channel settings...";
-      const response = await fetch("/api/alert-channel-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: gatherChannelSettings() }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        channelSettingsStatus.textContent = payload.error || "Failed to save channel settings.";
-        return;
-      }
-
-      populateChannelSettingsForm(payload.settings || {});
-      channelSettingsStatus.textContent = "Channel settings saved.";
-      await refreshAlertChannels();
+      await runActionWithStatus(
+        channelSettingsStatus,
+        "Saving channel settings...",
+        async () => {
+          const payload = await window.KilnUI.postJson("/api/alert-channel-settings", { settings: gatherChannelSettings() });
+          populateChannelSettingsForm(payload.settings || {});
+          await refreshAlertChannels();
+        },
+        "Channel settings saved.",
+      );
     }
 
     async function refreshWatchdogSettings() {
@@ -1039,37 +1061,32 @@
     }
 
     async function saveWatchdogSettings() {
-      watchdogSettingsStatus.textContent = "Saving watchdog settings...";
-      const response = await fetch("/api/watchdog-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: gatherWatchdogSettings() }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        watchdogSettingsStatus.textContent = payload.error || "Failed to save watchdog settings.";
-        return;
-      }
-
-      populateWatchdogSettingsForm(payload.settings || {});
-      watchdogSettingsStatus.textContent = "Watchdog settings saved.";
+      await runActionWithStatus(
+        watchdogSettingsStatus,
+        "Saving watchdog settings...",
+        async () => {
+          const payload = await window.KilnUI.postJson("/api/watchdog-settings", { settings: gatherWatchdogSettings() });
+          populateWatchdogSettingsForm(payload.settings || {});
+        },
+        "Watchdog settings saved.",
+      );
     }
 
     async function sendTestAlert(channels) {
-      testAlertStatus.textContent = "Sending test alert...";
-      const response = await fetch("/api/test-alert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channels }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        testAlertStatus.textContent = payload.error || "Failed to send test alert.";
-        return;
+      const payload = await runActionWithStatus(
+        testAlertStatus,
+        "Sending test alert...",
+        async () => {
+          const result = await window.KilnUI.postJson("/api/test-alert", { channels });
+          await refreshAlertDeliveries();
+          await refreshRecentAlerts();
+          return result;
+        },
+        null,
+      );
+      if (payload) {
+        setStatusMessage(testAlertStatus, payload.message || "Test alert sent.", false);
       }
-      testAlertStatus.textContent = payload.message || "Test alert sent.";
-      await refreshAlertDeliveries();
-      await refreshRecentAlerts();
     }
 
     async function refreshAll() {
@@ -1097,21 +1114,21 @@
       await saveAlertChannelSettings();
     });
 
-    resetChannelSettingsButton.addEventListener("click", async () => {
-      channelSettingsStatus.textContent = "Reloading saved settings...";
-      await refreshAlertChannelSettings();
-      channelSettingsStatus.textContent = "Saved settings reloaded.";
-    });
+      resetChannelSettingsButton.addEventListener("click", async () => {
+      await runActionWithStatus(channelSettingsStatus, "Reloading saved settings...", async () => {
+        await refreshAlertChannelSettings();
+      }, "Saved settings reloaded.");
+      });
 
     saveWatchdogSettingsButton.addEventListener("click", async () => {
       await saveWatchdogSettings();
     });
 
-    resetWatchdogSettingsButton.addEventListener("click", async () => {
-      watchdogSettingsStatus.textContent = "Reloading saved settings...";
-      await refreshWatchdogSettings();
-      watchdogSettingsStatus.textContent = "Saved settings reloaded.";
-    });
+      resetWatchdogSettingsButton.addEventListener("click", async () => {
+      await runActionWithStatus(watchdogSettingsStatus, "Reloading saved settings...", async () => {
+        await refreshWatchdogSettings();
+      }, "Saved settings reloaded.");
+      });
 
     ruleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1133,19 +1150,16 @@
       };
 
       const path = editingRuleId === null ? "/api/alert-rules" : `/api/alert-rules/${editingRuleId}`;
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        ruleError.textContent = result.error || "Failed to save alert rule.";
-        return;
-      }
-
-      resetRuleForm();
-      await refreshAlertRules();
+      await runActionWithStatus(
+        ruleError,
+        editingRuleId === null ? "Creating alert rule..." : "Saving alert rule...",
+        async () => {
+          await window.KilnUI.postJson(path, payload);
+          resetRuleForm();
+          await refreshAlertRules();
+        },
+        editingRuleId === null ? "Alert rule created." : "Alert rule saved.",
+      );
     });
 
     ruleCancel.addEventListener("click", () => {

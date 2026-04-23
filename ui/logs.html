@@ -379,6 +379,11 @@
 
     const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText);
 
+    function setLogStatus(message, isError = false) {
+      firingLogStatus.textContent = message;
+      firingLogStatus.classList.toggle("error-text", isError);
+    }
+
     function toLocalInputValue(isoText) {
       if (!isoText) return "";
       const value = new Date(isoText);
@@ -503,16 +508,15 @@
     }
 
     async function loadLog(logId, updateList = true) {
-      const response = await fetch(`/api/firing-logs/${logId}`);
-      const payload = await response.json();
-      if (!response.ok) {
-        firingLogStatus.textContent = payload.error || "Unable to load firing log.";
-        firingLogStatus.classList.add("error-text");
+      let payload;
+      try {
+        payload = await window.KilnUI.fetchJson(`/api/firing-logs/${logId}`);
+      } catch (error) {
+        setLogStatus(error instanceof Error ? error.message : String(error), true);
         return;
       }
       selectedLogId = logId;
-      firingLogStatus.textContent = "";
-      firingLogStatus.classList.remove("error-text");
+      setLogStatus("", false);
       renderSelectedLog(payload.log);
       renderLinkedEvents(payload.events || []);
       renderLinkedPhotos(payload.snapshots || []);
@@ -529,8 +533,7 @@
 
     firingLogForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      firingLogStatus.textContent = "Saving firing log...";
-      firingLogStatus.classList.remove("error-text");
+      setLogStatus("Saving firing log...");
       const body = {
         title: document.getElementById("logTitle").value.trim(),
         firing_type: document.getElementById("logFiringType").value,
@@ -543,19 +546,15 @@
         post_mortem: document.getElementById("logPostMortem").value.trim(),
       };
       const url = selectedLogId ? `/api/firing-logs/${selectedLogId}` : "/api/firing-logs";
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        firingLogStatus.textContent = payload.error || "Unable to save firing log.";
-        firingLogStatus.classList.add("error-text");
+      let payload;
+      try {
+        payload = await window.KilnUI.postJson(url, body);
+      } catch (error) {
+        setLogStatus(error instanceof Error ? error.message : String(error), true);
         return;
       }
       selectedLogId = payload.id;
-      firingLogStatus.textContent = selectedLogId ? "Firing log saved." : "Firing log created.";
+      setLogStatus(selectedLogId ? "Firing log saved." : "Firing log created.");
       await refreshLogs();
       if (selectedLogId) {
         await loadLog(selectedLogId);
@@ -572,42 +571,32 @@
 
     document.getElementById("refreshLinkedDataButton").addEventListener("click", async () => {
       if (!selectedLogId) {
-        firingLogStatus.textContent = "Save the firing log first so events and photos can be linked.";
-        firingLogStatus.classList.add("error-text");
+        setLogStatus("Save the firing log first so events and photos can be linked.", true);
         return;
       }
-      firingLogStatus.textContent = "Refreshing linked events and photos...";
-      firingLogStatus.classList.remove("error-text");
-      const response = await fetch(`/api/firing-logs/${selectedLogId}/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        firingLogStatus.textContent = payload.error || "Unable to refresh linked data.";
-        firingLogStatus.classList.add("error-text");
+      setLogStatus("Refreshing linked events and photos...");
+      try {
+        await window.KilnUI.postJson(`/api/firing-logs/${selectedLogId}/refresh`, {});
+      } catch (error) {
+        setLogStatus(error instanceof Error ? error.message : String(error), true);
         return;
       }
-      firingLogStatus.textContent = "Linked events and photos refreshed.";
+      setLogStatus("Linked events and photos refreshed.");
       await loadLog(selectedLogId);
       await refreshLogs();
     });
 
     document.getElementById("uploadResultPhotoButton").addEventListener("click", async () => {
       if (!selectedLogId) {
-        firingLogStatus.textContent = "Save the firing log first so result photos have a log to attach to.";
-        firingLogStatus.classList.add("error-text");
+        setLogStatus("Save the firing log first so result photos have a log to attach to.", true);
         return;
       }
       const file = resultPhotoFile.files && resultPhotoFile.files[0];
       if (!file) {
-        firingLogStatus.textContent = "Choose a photo to upload.";
-        firingLogStatus.classList.add("error-text");
+        setLogStatus("Choose a photo to upload.", true);
         return;
       }
-      firingLogStatus.textContent = "Uploading result photo...";
-      firingLogStatus.classList.remove("error-text");
+      setLogStatus("Uploading result photo...");
       const fileBuffer = await file.arrayBuffer();
       const bytes = new Uint8Array(fileBuffer);
       let binary = "";
@@ -615,25 +604,20 @@
         binary += String.fromCharCode(value);
       });
       const contentBase64 = btoa(binary);
-      const response = await fetch(`/api/firing-logs/${selectedLogId}/photos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      try {
+        await window.KilnUI.postJson(`/api/firing-logs/${selectedLogId}/photos`, {
           filename: file.name,
           mime_type: file.type,
           caption: resultPhotoCaption.value.trim(),
           content_base64: contentBase64,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        firingLogStatus.textContent = payload.error || "Unable to upload result photo.";
-        firingLogStatus.classList.add("error-text");
+        });
+      } catch (error) {
+        setLogStatus(error instanceof Error ? error.message : String(error), true);
         return;
       }
       resultPhotoCaption.value = "";
       resultPhotoFile.value = "";
-      firingLogStatus.textContent = "Result photo uploaded.";
+      setLogStatus("Result photo uploaded.");
       await loadLog(selectedLogId);
       await refreshLogs();
     });

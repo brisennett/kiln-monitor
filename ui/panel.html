@@ -425,6 +425,11 @@
       minute: "2-digit",
     });
 
+    function setEventStatus(message, isError = false) {
+      eventStatus.textContent = message;
+      eventStatus.classList.toggle("error-text", isError);
+    }
+
     function formatElapsed(seconds) {
       if (!Number.isFinite(seconds) || seconds < 0) return "--";
       const hours = Math.floor(seconds / 3600);
@@ -526,47 +531,27 @@
     }
 
     async function postEvent(label, eventType, detail) {
-      eventStatus.textContent = "Saving marker...";
-      const response = await fetch("/api/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      setEventStatus("Saving marker...");
+      await window.KilnUI.postJson("/api/events", {
           label,
           event_type: eventType,
           detail: detail || "",
-        }),
       });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to save marker");
-      }
-      eventStatus.textContent = `${label} saved.`;
+      setEventStatus(`${label} saved.`);
       eventDetailInput.value = "";
     }
 
     async function resetFaults() {
-      eventStatus.textContent = "Resetting faults...";
-      const response = await fetch("/api/reset-faults", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to reset faults");
-      }
-      eventStatus.textContent = "Faults reset.";
+      setEventStatus("Resetting faults...");
+      await window.KilnUI.postJson("/api/reset-faults");
+      setEventStatus("Faults reset.");
     }
 
     async function refreshPanel() {
       try {
-        const [statusResponse, watchdogResponse] = await Promise.all([
-          fetch("/api/status"),
-          fetch("/api/watchdog-settings"),
-        ]);
         const [statusPayload, watchdogPayload] = await Promise.all([
-          statusResponse.json(),
-          watchdogResponse.json(),
+          window.KilnUI.fetchJson("/api/status"),
+          window.KilnUI.fetchJson("/api/watchdog-settings"),
         ]);
         staleDataSeconds = Number(watchdogPayload.stale_data_seconds || staleDataSeconds);
         renderStatus(statusPayload);
@@ -585,7 +570,7 @@
           await postEvent(button.dataset.eventLabel, button.dataset.eventType, detail);
           await refreshPanel();
         } catch (error) {
-          eventStatus.textContent = error.message || "Unable to save marker.";
+          setEventStatus(error.message || "Unable to save marker.", true);
         }
       });
     });
@@ -595,21 +580,21 @@
         await resetFaults();
         await refreshPanel();
       } catch (error) {
-        eventStatus.textContent = error.message || "Unable to reset faults.";
+        setEventStatus(error.message || "Unable to reset faults.", true);
       }
     });
 
     document.getElementById("customEventButton").addEventListener("click", async () => {
       const detail = eventDetailInput.value.trim();
       if (!detail) {
-        eventStatus.textContent = "Add a note before saving a custom marker.";
+        setEventStatus("Add a note before saving a custom marker.", true);
         return;
       }
       try {
         await postEvent("Operator Note", "NOTE", detail);
         await refreshPanel();
       } catch (error) {
-        eventStatus.textContent = error.message || "Unable to save marker.";
+        setEventStatus(error.message || "Unable to save marker.", true);
       }
     });
 

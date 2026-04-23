@@ -296,6 +296,12 @@
 
     const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText);
 
+    function setStatusMessage(message, isError = false) {
+      eventStatus.textContent = message;
+      eventStatus.classList.toggle("success-text", !isError);
+      eventStatus.classList.toggle("error-text", isError);
+    }
+
     function renderEvents(events) {
       if (!events.length) {
         eventsTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No events recorded yet.</td></tr>';
@@ -331,25 +337,20 @@
 
     eventForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      eventStatus.textContent = "Saving marker...";
-      const response = await fetch("/api/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      setStatusMessage("Saving marker...");
+      try {
+        await window.KilnUI.postJson("/api/events", {
           event_type: document.getElementById("eventType").value,
           label: document.getElementById("eventLabel").value.trim(),
           detail: document.getElementById("eventDetail").value.trim(),
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        eventStatus.textContent = result.error || "Failed to add event marker.";
-        return;
+        });
+        eventForm.reset();
+        document.getElementById("eventType").value = "OPERATION";
+        setStatusMessage("Event marker added.");
+        await refreshEvents();
+      } catch (error) {
+        setStatusMessage(error instanceof Error ? error.message : String(error), true);
       }
-      eventForm.reset();
-      document.getElementById("eventType").value = "OPERATION";
-      eventStatus.textContent = "Event marker added.";
-      await refreshEvents();
     });
 
     document.getElementById("refreshEventsButton").addEventListener("click", async () => {
