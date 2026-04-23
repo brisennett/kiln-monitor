@@ -763,6 +763,7 @@
       <button type="button" id="resetFaultsButton">Reset Faults</button>
       <button type="button" id="resetAlertsButton">Reset Alerts</button>
     </section>
+    <div id="dashboardActionStatus" class="success-text"></div>
     <div id="statusBanner" class="status-banner">Loading...</div>
 
     <div id="setupModal" class="modal-backdrop" hidden>
@@ -1055,6 +1056,7 @@
     const lastAlert = document.getElementById("lastAlert");
     const activeProfileCard = document.getElementById("activeProfileCard");
     const chartMeta = document.getElementById("chartMeta");
+    const dashboardActionStatus = document.getElementById("dashboardActionStatus");
     const ruleForm = document.getElementById("ruleForm");
     const ruleSubmit = document.getElementById("ruleSubmit");
     const ruleCancel = document.getElementById("ruleCancel");
@@ -1168,6 +1170,29 @@
       overlayPoints: [],
       events: [],
     };
+
+    function setStatusMessage(element, message, isError = false) {
+      if (!element) {
+        return;
+      }
+      element.textContent = message;
+      element.classList.toggle("success-text", !isError);
+      element.classList.toggle("error-text", isError);
+    }
+
+    async function runActionWithStatus(element, pendingMessage, action, successMessage = null) {
+      setStatusMessage(element, pendingMessage, false);
+      try {
+        const result = await action();
+        if (successMessage !== null) {
+          setStatusMessage(element, successMessage, false);
+        }
+        return result;
+      } catch (error) {
+        setStatusMessage(element, error instanceof Error ? error.message : String(error), true);
+        return null;
+      }
+    }
 
     function setActiveAlertTab(tabName) {
       if (!alertTabButtons.length || !alertTabPanels.length) {
@@ -1782,11 +1807,7 @@
     }
 
     async function postReset(path) {
-      const response = await fetch(path, { method: "POST" });
-      if (!response.ok) {
-        const payload = await response.json();
-        throw new Error(payload.error || "Reset failed");
-      }
+      await window.KilnUI.postJson(path);
       await refreshAll();
     }
 
@@ -2214,15 +2235,15 @@
 
       profilesTableBody.querySelectorAll("[data-profile-activate]").forEach((button) => {
         button.addEventListener("click", async () => {
-          profileStatusMessage.textContent = "Starting profile tracking...";
-          const response = await fetch(`/api/profiles/${button.dataset.profileActivate}/activate`, { method: "POST" });
-          const payload = await response.json();
-          if (!response.ok) {
-            profileStatusMessage.textContent = payload.error || "Failed to start profile tracking.";
-            return;
-          }
-          profileStatusMessage.textContent = payload.message || "Profile tracking started.";
-          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+          await runActionWithStatus(
+            profileStatusMessage,
+            "Starting profile tracking...",
+            async () => {
+              await window.KilnUI.postJson(`/api/profiles/${button.dataset.profileActivate}/activate`);
+              await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+            },
+            "Profile tracking started.",
+          );
         });
       });
 
@@ -2250,17 +2271,18 @@
 
       profilesTableBody.querySelectorAll("[data-profile-delete]").forEach((button) => {
         button.addEventListener("click", async () => {
-          const response = await fetch(`/api/profiles/${button.dataset.profileDelete}/delete`, { method: "POST" });
-          const payload = await response.json();
-          if (!response.ok) {
-            profileStatusMessage.textContent = payload.error || "Failed to delete profile.";
-            return;
-          }
-          if (editingProfileId === Number(button.dataset.profileDelete)) {
-            resetProfileForm();
-          }
-          profileStatusMessage.textContent = "Profile deleted.";
-          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+          await runActionWithStatus(
+            profileStatusMessage,
+            "Deleting profile...",
+            async () => {
+              await window.KilnUI.postJson(`/api/profiles/${button.dataset.profileDelete}/delete`);
+              if (editingProfileId === Number(button.dataset.profileDelete)) {
+                resetProfileForm();
+              }
+              await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+            },
+            "Profile deleted.",
+          );
         });
       });
     }
@@ -2338,23 +2360,22 @@
     }
 
     async function refreshCameraStatus() {
-      const response = await fetch("/api/camera/status");
-      const payload = await response.json();
+      const payload = await window.KilnUI.fetchJson("/api/camera/status");
       renderCameraStatus(payload);
     }
 
     async function captureSnapshot() {
-      cameraStatusMessage.textContent = "Capturing snapshot...";
       captureSnapshotButton.disabled = true;
       try {
-        const response = await fetch("/api/camera/capture", { method: "POST" });
-        const payload = await response.json();
-        if (!response.ok) {
-          cameraStatusMessage.textContent = payload.error || "Failed to capture snapshot.";
-          return;
-        }
-        cameraStatusMessage.textContent = payload.message || "Snapshot captured.";
-        renderCameraStatus(payload.camera || null);
+        await runActionWithStatus(
+          cameraStatusMessage,
+          "Capturing snapshot...",
+          async () => {
+            const payload = await window.KilnUI.postJson("/api/camera/capture");
+            renderCameraStatus(payload.camera || null);
+          },
+          "Snapshot captured.",
+        );
       } finally {
         captureSnapshotButton.disabled = false;
       }
@@ -2426,28 +2447,32 @@
 
       rulesTableBody.querySelectorAll("[data-clone]").forEach((button) => {
         button.addEventListener("click", async () => {
-          const response = await fetch(`/api/alert-rules/${button.dataset.clone}/clone`, { method: "POST" });
-          const result = await response.json();
-          if (!response.ok) {
-            ruleError.textContent = result.error || "Failed to clone alert rule.";
-            return;
-          }
-          await refreshAlertRules();
+          await runActionWithStatus(
+            ruleError,
+            "Cloning alert rule...",
+            async () => {
+              await window.KilnUI.postJson(`/api/alert-rules/${button.dataset.clone}/clone`);
+              await refreshAlertRules();
+            },
+            "Alert rule cloned.",
+          );
         });
       });
 
       rulesTableBody.querySelectorAll("[data-delete]").forEach((button) => {
         button.addEventListener("click", async () => {
-          const response = await fetch(`/api/alert-rules/${button.dataset.delete}/delete`, { method: "POST" });
-          const result = await response.json();
-          if (!response.ok) {
-            ruleError.textContent = result.error || "Failed to delete alert rule.";
-            return;
-          }
-          if (editingRuleId === Number(button.dataset.delete)) {
-            resetRuleForm();
-          }
-          await refreshAlertRules();
+          await runActionWithStatus(
+            ruleError,
+            "Deleting alert rule...",
+            async () => {
+              await window.KilnUI.postJson(`/api/alert-rules/${button.dataset.delete}/delete`);
+              if (editingRuleId === Number(button.dataset.delete)) {
+                resetRuleForm();
+              }
+              await refreshAlertRules();
+            },
+            "Alert rule deleted.",
+          );
         });
       });
     }
@@ -2509,21 +2534,16 @@
       if (!channelSettingsStatus) {
         return;
       }
-      channelSettingsStatus.textContent = "Saving channel settings...";
-      const response = await fetch("/api/alert-channel-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: gatherChannelSettings() }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        channelSettingsStatus.textContent = payload.error || "Failed to save channel settings.";
-        return;
-      }
-
-      populateChannelSettingsForm(payload.settings || {});
-      channelSettingsStatus.textContent = "Channel settings saved.";
-      await refreshAlertChannels();
+      await runActionWithStatus(
+        channelSettingsStatus,
+        "Saving channel settings...",
+        async () => {
+          const payload = await window.KilnUI.postJson("/api/alert-channel-settings", { settings: gatherChannelSettings() });
+          populateChannelSettingsForm(payload.settings || {});
+          await refreshAlertChannels();
+        },
+        "Channel settings saved.",
+      );
     }
 
     async function refreshWatchdogSettings() {
@@ -2539,42 +2559,36 @@
       if (!watchdogSettingsStatus) {
         return;
       }
-      watchdogSettingsStatus.textContent = "Saving watchdog settings...";
-      const response = await fetch("/api/watchdog-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings: gatherWatchdogSettings() }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        watchdogSettingsStatus.textContent = payload.error || "Failed to save watchdog settings.";
-        return;
-      }
-
-      populateWatchdogSettingsForm(payload.settings || {});
-      watchdogSettingsStatus.textContent = "Watchdog settings saved.";
+      await runActionWithStatus(
+        watchdogSettingsStatus,
+        "Saving watchdog settings...",
+        async () => {
+          const payload = await window.KilnUI.postJson("/api/watchdog-settings", { settings: gatherWatchdogSettings() });
+          populateWatchdogSettingsForm(payload.settings || {});
+        },
+        "Watchdog settings saved.",
+      );
     }
 
     async function sendTestAlert(channels) {
       if (!testAlertStatus) {
         return;
       }
-      testAlertStatus.textContent = "Sending test alert...";
-      const response = await fetch("/api/test-alert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channels }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        testAlertStatus.textContent = payload.error || "Failed to send test alert.";
-        return;
+      const payload = await runActionWithStatus(
+        testAlertStatus,
+        "Sending test alert...",
+        async () => {
+          const result = await window.KilnUI.postJson("/api/test-alert", { channels });
+          await refreshAlertDeliveries();
+          return result;
+        },
+        null,
+      );
+      if (payload) {
+        const sentCount = (payload.results || []).filter((result) => result.success).length;
+        const totalCount = (payload.results || []).length;
+        setStatusMessage(testAlertStatus, payload.message || `Sent ${sentCount} of ${totalCount} test alerts.`, false);
       }
-
-      const sentCount = (payload.results || []).filter((result) => result.success).length;
-      const totalCount = (payload.results || []).length;
-      testAlertStatus.textContent = payload.message || `Sent ${sentCount} of ${totalCount} test alerts.`;
-      await refreshAlertDeliveries();
     }
 
     async function refreshHistory() {
@@ -2680,9 +2694,9 @@
       });
 
       resetChannelSettingsButton.addEventListener("click", async () => {
-        channelSettingsStatus.textContent = "Reloading saved settings...";
-        await refreshAlertChannelSettings();
-        channelSettingsStatus.textContent = "Saved settings reloaded.";
+        await runActionWithStatus(channelSettingsStatus, "Reloading saved settings...", async () => {
+          await refreshAlertChannelSettings();
+        }, "Saved settings reloaded.");
       });
     }
 
@@ -2692,9 +2706,9 @@
       });
 
       resetWatchdogSettingsButton.addEventListener("click", async () => {
-        watchdogSettingsStatus.textContent = "Reloading saved settings...";
-        await refreshWatchdogSettings();
-        watchdogSettingsStatus.textContent = "Saved settings reloaded.";
+        await runActionWithStatus(watchdogSettingsStatus, "Reloading saved settings...", async () => {
+          await refreshWatchdogSettings();
+        }, "Saved settings reloaded.");
       });
     }
 
@@ -2749,24 +2763,43 @@
     panelBgPicker.addEventListener("input", () => { void saveTheme(); });
 
     document.getElementById("resetColorsButton").addEventListener("click", async () => {
-      applyTheme(null);
-      await fetch("/api/dashboard-preferences", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          theme: {
-            accent: "#38bdf8",
-            pageBg: "#0b1220",
-            panelBg: "#111827",
-          },
-        }),
-      });
+      await runActionWithStatus(
+        dashboardActionStatus,
+        "Resetting dashboard colors...",
+        async () => {
+          applyTheme(null);
+          await window.KilnUI.postJson("/api/dashboard-preferences", {
+            theme: {
+              accent: "#38bdf8",
+              pageBg: "#0b1220",
+              panelBg: "#111827",
+            },
+          });
+        },
+        "Dashboard colors reset.",
+      );
     });
 
-    document.getElementById("resetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
-    document.getElementById("resetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
-    document.getElementById("inlineResetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
-    document.getElementById("inlineResetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
+    document.getElementById("resetFaultsButton").addEventListener("click", async () => {
+      await runActionWithStatus(dashboardActionStatus, "Resetting faults...", async () => {
+        await postReset("/api/reset-faults");
+      }, "Faults reset.");
+    });
+    document.getElementById("resetAlertsButton").addEventListener("click", async () => {
+      await runActionWithStatus(dashboardActionStatus, "Resetting alerts...", async () => {
+        await postReset("/api/reset-alerts");
+      }, "Alerts reset.");
+    });
+    document.getElementById("inlineResetFaultsButton").addEventListener("click", async () => {
+      await runActionWithStatus(dashboardActionStatus, "Resetting faults...", async () => {
+        await postReset("/api/reset-faults");
+      }, "Faults reset.");
+    });
+    document.getElementById("inlineResetAlertsButton").addEventListener("click", async () => {
+      await runActionWithStatus(dashboardActionStatus, "Resetting alerts...", async () => {
+        await postReset("/api/reset-alerts");
+      }, "Alerts reset.");
+    });
 
     if (ruleForm && ruleCancel) {
       ruleForm.addEventListener("submit", async (event) => {
@@ -2791,20 +2824,16 @@
         const path = editingRuleId === null
           ? "/api/alert-rules"
           : `/api/alert-rules/${editingRuleId}`;
-
-        const response = await fetch(path, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          ruleError.textContent = result.error || "Failed to save alert rule.";
-          return;
-        }
-
-        resetRuleForm();
-        await refreshAlertRules();
+        await runActionWithStatus(
+          ruleError,
+          editingRuleId === null ? "Creating alert rule..." : "Saving alert rule...",
+          async () => {
+            await window.KilnUI.postJson(path, payload);
+            resetRuleForm();
+            await refreshAlertRules();
+          },
+          editingRuleId === null ? "Alert rule created." : "Alert rule saved.",
+        );
       });
 
       ruleCancel.addEventListener("click", () => {
@@ -2819,25 +2848,21 @@
     if (eventForm && eventStatus) {
       eventForm.addEventListener("submit", async (event) => {
         event.preventDefault();
-        eventStatus.textContent = "Saving marker...";
-        const response = await fetch("/api/events", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event_type: document.getElementById("eventType").value,
-            label: document.getElementById("eventLabel").value.trim(),
-            detail: document.getElementById("eventDetail").value.trim(),
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          eventStatus.textContent = result.error || "Failed to add event marker.";
-          return;
-        }
-        eventForm.reset();
-        document.getElementById("eventType").value = "OPERATION";
-        eventStatus.textContent = "Event marker added.";
-        await refreshHistory();
+        await runActionWithStatus(
+          eventStatus,
+          "Saving marker...",
+          async () => {
+            await window.KilnUI.postJson("/api/events", {
+              event_type: document.getElementById("eventType").value,
+              label: document.getElementById("eventLabel").value.trim(),
+              detail: document.getElementById("eventDetail").value.trim(),
+            });
+            eventForm.reset();
+            document.getElementById("eventType").value = "OPERATION";
+            await refreshHistory();
+          },
+          "Event marker added.",
+        );
       });
     }
 
@@ -2848,19 +2873,16 @@
       const path = editingProfileId === null
         ? "/api/profiles"
         : `/api/profiles/${editingProfileId}`;
-      const response = await fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        profileError.textContent = result.error || "Failed to save profile.";
-        return;
-      }
-      profileStatusMessage.textContent = editingProfileId === null ? "Profile created." : "Profile updated.";
-      resetProfileForm();
-      await refreshProfiles();
+      await runActionWithStatus(
+        profileError,
+        editingProfileId === null ? "Creating profile..." : "Saving profile...",
+        async () => {
+          await window.KilnUI.postJson(path, payload);
+          resetProfileForm();
+          await refreshProfiles();
+        },
+        editingProfileId === null ? "Profile created." : "Profile updated.",
+      );
     });
 
     profileCancel.addEventListener("click", () => {
@@ -2873,20 +2895,21 @@
     });
 
     profileStopButton.addEventListener("click", async () => {
-      const response = await fetch("/api/profiles/stop", { method: "POST" });
-      const payload = await response.json();
-      if (!response.ok) {
-        profileStatusMessage.textContent = payload.error || "Failed to stop profile tracking.";
-        return;
-      }
-      profileStatusMessage.textContent = payload.message || "Profile tracking stopped.";
-      await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+      await runActionWithStatus(
+        profileStatusMessage,
+        "Stopping profile tracking...",
+        async () => {
+          await window.KilnUI.postJson("/api/profiles/stop");
+          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+        },
+        "Profile tracking stopped.",
+      );
     });
 
     profileRefreshButton.addEventListener("click", async () => {
-      profileStatusMessage.textContent = "Reloading profiles...";
-      await refreshProfiles();
-      profileStatusMessage.textContent = "Profiles reloaded.";
+      await runActionWithStatus(profileStatusMessage, "Reloading profiles...", async () => {
+        await refreshProfiles();
+      }, "Profiles reloaded.");
     });
 
     captureSnapshotButton.addEventListener("click", async () => {
@@ -2894,9 +2917,9 @@
     });
 
     refreshSnapshotButton.addEventListener("click", async () => {
-      cameraStatusMessage.textContent = "Refreshing camera status...";
-      await refreshCameraStatus();
-      cameraStatusMessage.textContent = "Camera status refreshed.";
+      await runActionWithStatus(cameraStatusMessage, "Refreshing camera status...", async () => {
+        await refreshCameraStatus();
+      }, "Camera status refreshed.");
     });
 
     canvas.addEventListener("mousemove", (event) => {

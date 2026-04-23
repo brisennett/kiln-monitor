@@ -31,7 +31,12 @@ window.KilnUI = {
 
   async fetchJson(url, options) {
     const response = await fetch(url, options);
-    const payload = await response.json();
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch (_error) {
+      payload = {};
+    }
     if (!response.ok) {
       throw new Error(payload.error || `Request failed: ${response.status}`);
     }
