@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="/static/shared.css" />
+  <title>Kiln Monitor Panel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      --bg: #081018;
+      --bg-soft: #112033;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
+      color: var(--text);
+    }
+    main {
+      width: min(100%, 540px);
+      margin: 0 auto;
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 2px 0;
+    }
+    .eyebrow {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-size: 1.55rem;
+      line-height: 1.1;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.52);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 700;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .page-link.active-page {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .panel {
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+    .hero {
+      padding: 16px;
+      background:
+        linear-gradient(135deg, rgba(56, 189, 248, 0.20), rgba(8, 16, 24, 0)),
+        var(--panel-strong);
+    }
+    .hero-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .health-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--muted);
+      box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.12);
+    }
+    .hero-temp {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .temp-reading {
+      font-size: clamp(5.4rem, 24vw, 8.4rem);
+      line-height: 0.88;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      text-shadow: 0 10px 30px rgba(56, 189, 248, 0.18);
+    }
+    .temp-secondary {
+      color: var(--muted);
+      font-size: 1.15rem;
+      padding-bottom: 12px;
+    }
+    .meta-line {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .stat-card,
+    .risk-card,
+    .event-card {
+      padding: 14px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.11em;
+      margin-bottom: 10px;
+    }
+    .value {
+      font-size: 1.28rem;
+      font-weight: 700;
+      line-height: 1.18;
+    }
+    .detail {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.35;
+    }
+    .risk-card {
+      border-width: 2px;
+    }
+    .risk-ok {
+      border-color: rgba(34, 197, 94, 0.35);
+      background: linear-gradient(180deg, rgba(20, 83, 45, 0.28), rgba(13, 23, 39, 0.94));
+    }
+    .risk-warning {
+      border-color: rgba(245, 158, 11, 0.40);
+      background: linear-gradient(180deg, rgba(120, 53, 15, 0.32), rgba(13, 23, 39, 0.94));
+    }
+    .risk-danger {
+      border-color: rgba(239, 68, 68, 0.42);
+      background: linear-gradient(180deg, rgba(127, 29, 29, 0.34), rgba(13, 23, 39, 0.94));
+    }
+    .event-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    button,
+    input {
+      font: inherit;
+    }
+    .event-button,
+    .submit-button {
+      min-height: 40px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
+      padding: 8px 12px;
+      font-weight: 700;
+      font-size: 0.88rem;
+    }
+    .event-button:active,
+    .submit-button:active {
+      transform: translateY(1px);
+    }
+    .event-form {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .event-note {
+      min-height: 48px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.66);
+      color: var(--text);
+      padding: 12px 14px;
+    }
+    .submit-button {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.95), rgba(37, 99, 235, 0.92));
+      border-color: rgba(125, 211, 252, 0.28);
+    }
+    .secondary-button {
+      min-height: 48px;
+      border-radius: 14px;
+      border: 1px solid rgba(248, 113, 113, 0.24);
+      background: rgba(127, 29, 29, 0.36);
+      color: var(--text);
+      padding: 10px 14px;
+      font-weight: 700;
+    }
+    .helper-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .event-status {
+      min-height: 1.2em;
+      margin-top: 8px;
+      color: #cbd5e1;
+      font-size: 0.94rem;
+    }
+    @media (orientation: landscape) and (max-height: 600px) {
+      body {
+        display: flex;
+        align-items: stretch;
+      }
+      main {
+        width: min(100vw, 960px);
+        max-width: none;
+        min-height: 100vh;
+        padding: 10px;
+        grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.95fr);
+        grid-template-areas:
+          "topbar topbar"
+          "hero event"
+          "risk event"
+          "helper event"
+          "bottom bottom";
+        align-content: start;
+      }
+      .topbar {
+        grid-area: topbar;
+        padding-top: 0;
+      }
+      .hero {
+        grid-area: hero;
+        min-height: 0;
+      }
+      #riskCard {
+        grid-area: risk;
+      }
+      .helper-row {
+        grid-area: helper;
+        margin-top: 0;
+      }
+      .event-card {
+        grid-area: event;
+        align-self: stretch;
+      }
+      .bottom-grid {
+        grid-area: bottom;
+      }
+      .hero-status {
+        margin-bottom: 10px;
+      }
+      .temp-reading {
+        font-size: clamp(4.8rem, 14vw, 7rem);
+      }
+      .meta-line {
+        margin-top: 8px;
+        font-size: 0.98rem;
+      }
+      .event-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .event-form {
+        gap: 8px;
+      }
+      .bottom-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 380px) {
+      .grid,
+      .bottom-grid,
+      .event-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero-status {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="topbar">
+      <div>
+        <div class="eyebrow">Operator Surface</div>
+        <h1>Kiln Panel</h1>
+      </div>
+      <a href="/" class="page-link">Dashboard</a>
+    </section>
+
+    <section class="panel hero">
+      <div class="hero-status">
+        <div class="health-pill">
+          <span id="healthDot" class="health-dot"></span>
+          <span id="healthText">Checking feed...</span>
+        </div>
+        <a href="/panel" class="page-link active-page">Panel</a>
+      </div>
+      <div class="hero-temp">
+        <div class="temp-reading" id="currentTemp">--</div>
+        <div class="temp-secondary" id="currentTempSecondary">Waiting for data</div>
+      </div>
+      <div class="meta-line">
+        <span id="lastUpdateText">Last update: --</span>
+        <span id="sampleAgeText">Age: --</span>
+      </div>
+    </section>
+
+    <section class="panel event-card">
+      <div class="label">Quick Event Marker</div>
+      <div class="event-grid">
+        <button type="button" class="event-button" data-event-type="OBSERVATION" data-event-label="Lid Open">Lid Open</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Witness Check">Witness Check</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 1">Stage 1</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 2">Stage 2</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 3">Stage 3</button>
+        <button type="button" class="event-button" data-event-type="OPERATION" data-event-label="Stage 4">Stage 4</button>
+      </div>
+      <div class="event-form">
+        <input id="eventDetailInput" class="event-note" type="text" maxlength="160" placeholder="Optional note to append to the marker" />
+        <button type="button" id="customEventButton" class="submit-button">Add Note Marker</button>
+      </div>
+      <div class="event-status" id="eventStatus"></div>
+    </section>
+
+    <section id="riskCard" class="panel risk-card risk-ok">
+      <div class="label">Current Attention</div>
+      <div class="value" id="riskTitle">No active alerts or faults</div>
+      <div class="detail" id="riskDetail">The kiln feed looks healthy.</div>
+    </section>
+
+    <section class="helper-row">
+      <button type="button" id="resetFaultsButton" class="secondary-button">Reset Faults</button>
+      <a href="/logs" class="page-link">Logs</a>
+      <a href="/alerts" class="page-link">Admin Pages</a>
+    </section>
+
+    <section class="bottom-grid">
+      <section class="panel stat-card">
+        <div class="label">Profile</div>
+        <div class="value" id="profileName">No active profile</div>
+        <div class="detail" id="profileMeta">Start tracking a firing profile to show segment and elapsed time here.</div>
+      </section>
+      <section class="panel stat-card">
+        <div class="label">Segment</div>
+        <div class="value" id="segmentName">--</div>
+        <div class="detail" id="segmentMeta">Expected temp and elapsed time will appear during a run.</div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const currentTemp = document.getElementById("currentTemp");
+    const currentTempSecondary = document.getElementById("currentTempSecondary");
+    const lastUpdateText = document.getElementById("lastUpdateText");
+    const sampleAgeText = document.getElementById("sampleAgeText");
+    const healthDot = document.getElementById("healthDot");
+    const healthText = document.getElementById("healthText");
+    const profileName = document.getElementById("profileName");
+    const profileMeta = document.getElementById("profileMeta");
+    const segmentName = document.getElementById("segmentName");
+    const segmentMeta = document.getElementById("segmentMeta");
+    const riskCard = document.getElementById("riskCard");
+    const riskTitle = document.getElementById("riskTitle");
+    const riskDetail = document.getElementById("riskDetail");
+    const eventStatus = document.getElementById("eventStatus");
+    const eventDetailInput = document.getElementById("eventDetailInput");
+
+    let staleDataSeconds = 120;
+
+    const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    function formatElapsed(seconds) {
+      if (!Number.isFinite(seconds) || seconds < 0) return "--";
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      if (hours > 0) return `${hours}h ${minutes}m`;
+      return `${minutes}m`;
+    }
+
+    function formatTempPrimary(tempF) {
+      if (tempF === null || tempF === undefined || Number.isNaN(Number(tempF))) return "--";
+      return `${Math.round(Number(tempF))}°F`;
+    }
+
+    function formatTempSecondary(tempC) {
+      if (tempC === null || tempC === undefined || Number.isNaN(Number(tempC))) return "";
+      return `${Number(tempC).toFixed(1)}°C`;
+    }
+
+    function setHealth(state, text) {
+      const colors = {
+        ok: "var(--ok)",
+        warn: "var(--warn)",
+        danger: "var(--danger)",
+      };
+      healthDot.style.background = colors[state] || "var(--muted)";
+      healthDot.style.boxShadow = `0 0 0 4px ${state === "danger" ? "rgba(239, 68, 68, 0.16)" : state === "warn" ? "rgba(245, 158, 11, 0.16)" : "rgba(34, 197, 94, 0.16)"}`;
+      healthText.textContent = text;
+    }
+
+    function updateRisk(status) {
+      const latestSample = status.latest_sample;
+      const latestFault = status.latest_fault;
+      const activeAlertRule = status.active_alert_rule;
+      riskCard.className = "panel risk-card";
+
+      if (activeAlertRule) {
+        const severity = String(activeAlertRule.severity || "WARNING").toUpperCase();
+        riskCard.classList.add(severity === "CRITICAL" ? "risk-danger" : "risk-warning");
+        riskTitle.textContent = `${severity} Alert: ${activeAlertRule.name || "Rule active"}`;
+        riskDetail.textContent = `Threshold ${Math.round(Number(activeAlertRule.threshold_f || 0))}°F • Last trigger ${formatTimestamp(activeAlertRule.last_triggered_at)}`;
+        return;
+      }
+
+      if (latestFault) {
+        riskCard.classList.add("risk-danger");
+        riskTitle.textContent = "Latest Fault Sample";
+        riskDetail.textContent = `${latestFault.detail || "Sensor fault"} • ${latestFault.sample_age || formatTimestamp(latestFault.timestamp_utc)}`;
+        return;
+      }
+
+      if (!latestSample || latestSample.status !== "OK") {
+        riskCard.classList.add("risk-warning");
+        riskTitle.textContent = "Temperature Feed Needs Attention";
+        riskDetail.textContent = latestSample && latestSample.detail ? latestSample.detail : "No healthy live sample is available right now.";
+        return;
+      }
+
+      riskCard.classList.add("risk-ok");
+      riskTitle.textContent = "No active alerts or faults";
+      riskDetail.textContent = "The kiln feed looks healthy.";
+    }
+
+    function renderStatus(status) {
+      const latestSample = status.latest_sample;
+      const activeRun = status.active_profile_run;
+      const sampleTime = latestSample && latestSample.timestamp_utc ? new Date(latestSample.timestamp_utc).getTime() : null;
+      const ageSeconds = sampleTime ? Math.max(0, Math.floor((Date.now() - sampleTime) / 1000)) : null;
+
+      currentTemp.textContent = latestSample ? formatTempPrimary(latestSample.temp_f) : "--";
+      currentTempSecondary.textContent = latestSample
+        ? [formatTempSecondary(latestSample.temp_c), latestSample.status === "OK" ? "Live sample" : (latestSample.detail || "Fault sample")].filter(Boolean).join(" • ")
+        : "Waiting for data";
+      lastUpdateText.textContent = `Last update: ${latestSample ? formatTimestamp(latestSample.timestamp_utc) : "--"}`;
+      sampleAgeText.textContent = `Age: ${latestSample ? (latestSample.sample_age || "--") : "--"}`;
+
+      if (!latestSample || ageSeconds === null) {
+        setHealth("danger", "No live data");
+      } else if (latestSample.status !== "OK") {
+        setHealth("danger", "Faulted sample feed");
+      } else if (ageSeconds > staleDataSeconds) {
+        setHealth("warn", "Feed is stale");
+      } else {
+        setHealth("ok", "Feed is fresh");
+      }
+
+      if (activeRun) {
+        profileName.textContent = activeRun.name || "Active profile";
+        profileMeta.textContent = `${activeRun.phase || "Running"} • Started ${formatTimestamp(activeRun.started_at)}`;
+        segmentName.textContent = activeRun.segment_name || "Between segments";
+        segmentMeta.textContent = `${formatTempPrimary(activeRun.expected_temp_f)} expected • ${formatElapsed(activeRun.elapsed_seconds)} elapsed`;
+      } else {
+        profileName.textContent = "No active profile";
+        profileMeta.textContent = "Start tracking a firing profile to show segment and elapsed time here.";
+        segmentName.textContent = "--";
+        segmentMeta.textContent = "Expected temp and elapsed time will appear during a run.";
+      }
+
+      updateRisk(status);
+    }
+
+    async function postEvent(label, eventType, detail) {
+      eventStatus.textContent = "Saving marker...";
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label,
+          event_type: eventType,
+          detail: detail || "",
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to save marker");
+      }
+      eventStatus.textContent = `${label} saved.`;
+      eventDetailInput.value = "";
+    }
+
+    async function resetFaults() {
+      eventStatus.textContent = "Resetting faults...";
+      const response = await fetch("/api/reset-faults", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to reset faults");
+      }
+      eventStatus.textContent = "Faults reset.";
+    }
+
+    async function refreshPanel() {
+      try {
+        const [statusResponse, watchdogResponse] = await Promise.all([
+          fetch("/api/status"),
+          fetch("/api/watchdog-settings"),
+        ]);
+        const [statusPayload, watchdogPayload] = await Promise.all([
+          statusResponse.json(),
+          watchdogResponse.json(),
+        ]);
+        staleDataSeconds = Number(watchdogPayload.stale_data_seconds || staleDataSeconds);
+        renderStatus(statusPayload);
+      } catch (error) {
+        setHealth("danger", "Panel refresh failed");
+        riskCard.className = "panel risk-card risk-danger";
+        riskTitle.textContent = "Refresh Error";
+        riskDetail.textContent = error.message || "Unable to load panel data.";
+      }
+    }
+
+    document.querySelectorAll(".event-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const detail = eventDetailInput.value.trim();
+        try {
+          await postEvent(button.dataset.eventLabel, button.dataset.eventType, detail);
+          await refreshPanel();
+        } catch (error) {
+          eventStatus.textContent = error.message || "Unable to save marker.";
+        }
+      });
+    });
+
+    document.getElementById("resetFaultsButton").addEventListener("click", async () => {
+      try {
+        await resetFaults();
+        await refreshPanel();
+      } catch (error) {
+        eventStatus.textContent = error.message || "Unable to reset faults.";
+      }
+    });
+
+    document.getElementById("customEventButton").addEventListener("click", async () => {
+      const detail = eventDetailInput.value.trim();
+      if (!detail) {
+        eventStatus.textContent = "Add a note before saving a custom marker.";
+        return;
+      }
+      try {
+        await postEvent("Operator Note", "NOTE", detail);
+        await refreshPanel();
+      } catch (error) {
+        eventStatus.textContent = error.message || "Unable to save marker.";
+      }
+    });
+
+    refreshPanel();
+    setInterval(refreshPanel, 5000);
+  </script>
+</body>
+</html>

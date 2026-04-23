@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/shared.css" />
+  <title>Kiln Monitor Faults</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      --bg: #081018;
+      --bg-soft: #112033;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      color: var(--text);
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.48);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+      min-height: 44px;
+    }
+    .page-link.active-page {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .page-header, .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    .card {
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+    .label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .subtle {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .diagnostics-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 14px;
+    }
+    .filter-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 14px;
+    }
+    .diagnostic-card {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 12px;
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.92), rgba(13, 23, 39, 0.82));
+    }
+    .value {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .range-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button {
+      border: 1px solid #334155;
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.active {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    .rules-table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.95rem;
+      vertical-align: top;
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .page-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link">Logs</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link active-page">Faults</a>
+    </section>
+
+    <section class="page-header">
+      <div>
+        <h1>Faults</h1>
+        <div class="subtle">Review fault rates and recent bad samples here so the main dashboard can stay focused on the live run.</div>
+      </div>
+      <div class="toolbar">
+        <div class="range-buttons">
+          <button type="button" data-range="1h">1h</button>
+          <button type="button" data-range="24h" class="active">24h</button>
+          <button type="button" data-range="7d">7d</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Fault Diagnostics</div>
+      <div class="subtle">Windowed fault counts and streaks based on the selected range.</div>
+      <div id="diagnosticsGrid" class="diagnostics-grid">
+        <div class="diagnostic-card"><div class="label">Loading</div><div class="value">--</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Recent Fault Samples</div>
+      <div class="subtle">Showing up to 100 recent fault rows in the selected window.</div>
+      <div class="filter-grid">
+        <div>
+          <label for="faultSearch">Search Detail</label>
+          <input id="faultSearch" type="text" placeholder="Disconnected, CRC, etc." />
+        </div>
+        <div>
+          <label for="faultMinTemp">Min Temp F</label>
+          <input id="faultMinTemp" type="number" step="0.1" />
+        </div>
+        <div>
+          <label for="faultMaxTemp">Max Temp F</label>
+          <input id="faultMaxTemp" type="number" step="0.1" />
+        </div>
+        <div>
+          <label for="faultStart">Start</label>
+          <input id="faultStart" type="datetime-local" />
+        </div>
+        <div>
+          <label for="faultEnd">End</label>
+          <input id="faultEnd" type="datetime-local" />
+        </div>
+      </div>
+      <div class="range-buttons" style="margin-top: 12px;">
+        <button type="button" id="applyFaultFiltersButton">Apply Filters</button>
+        <button type="button" id="clearFaultFiltersButton">Clear Filters</button>
+      </div>
+      <div class="rules-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Temperature</th>
+              <th>Detail</th>
+              <th>Fault Context</th>
+            </tr>
+          </thead>
+          <tbody id="faultsTableBody">
+            <tr><td colspan="4" class="subtle">Loading faults...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const diagnosticsGrid = document.getElementById("diagnosticsGrid");
+    const faultsTableBody = document.getElementById("faultsTableBody");
+    const faultSearch = document.getElementById("faultSearch");
+    const faultMinTemp = document.getElementById("faultMinTemp");
+    const faultMaxTemp = document.getElementById("faultMaxTemp");
+    const faultStart = document.getElementById("faultStart");
+    const faultEnd = document.getElementById("faultEnd");
+    let selectedRange = "24h";
+
+    const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText);
+
+    function formatTemp(tempF, tempC) {
+      if (tempF === null || tempF === undefined) {
+        return "--";
+      }
+      const cText = tempC === null || tempC === undefined ? "--" : `${Number(tempC).toFixed(1)} C`;
+      return `${Number(tempF).toFixed(1)} F / ${cText}`;
+    }
+
+    function renderDiagnostics(diagnostics) {
+      if (!diagnostics) {
+        diagnosticsGrid.innerHTML = '<div class="diagnostic-card"><div class="label">No data</div><div class="value">--</div></div>';
+        return;
+      }
+      const detailText = (diagnostics.top_fault_details || []).length
+        ? diagnostics.top_fault_details.map((item) => `${item.detail} (${item.count})`).join(", ")
+        : "No recurring fault details in this window.";
+      diagnosticsGrid.innerHTML = `
+        <div class="diagnostic-card"><div class="label">Fault Samples</div><div class="value">${Number(diagnostics.fault_samples || 0).toLocaleString()}</div></div>
+        <div class="diagnostic-card"><div class="label">Fault Rate</div><div class="value">${Number(diagnostics.fault_rate_percent || 0).toFixed(1)}%</div></div>
+        <div class="diagnostic-card"><div class="label">Longest Streak</div><div class="value">${Number(diagnostics.longest_fault_streak || 0)} samples</div></div>
+        <div class="diagnostic-card"><div class="label">Current Streak</div><div class="value">${Number(diagnostics.current_fault_streak || 0)} samples</div></div>
+        <div class="diagnostic-card"><div class="label">Top Details</div><div class="subtle">${detailText}</div></div>
+      `;
+    }
+
+    function renderFaults(faults) {
+      if (!faults.length) {
+        faultsTableBody.innerHTML = '<tr><td colspan="4" class="subtle">No faults in this window.</td></tr>';
+        return;
+      }
+      faultsTableBody.innerHTML = "";
+      faults.forEach((fault) => {
+        const contextParts = [];
+        if (fault.error_streak !== null && fault.error_streak !== undefined) {
+          contextParts.push(`streak ${fault.error_streak}`);
+        }
+        if (fault.seconds_since_last_good !== null && fault.seconds_since_last_good !== undefined) {
+          contextParts.push(`${Number(fault.seconds_since_last_good).toFixed(0)}s since last good`);
+        }
+        if (fault.previous_good_temp_f !== null && fault.previous_good_temp_f !== undefined) {
+          contextParts.push(`prev ${Number(fault.previous_good_temp_f).toFixed(1)} F`);
+        }
+        if (fault.delta_from_previous_good_f !== null && fault.delta_from_previous_good_f !== undefined) {
+          contextParts.push(`delta ${Number(fault.delta_from_previous_good_f).toFixed(1)} F`);
+        }
+        if (fault.cold_junction_c !== null && fault.cold_junction_c !== undefined) {
+          contextParts.push(`CJ ${Number(fault.cold_junction_c).toFixed(1)} C`);
+        }
+        if (fault.sensor_model) {
+          contextParts.push(fault.sensor_model);
+        }
+        if (fault.thermocouple_type) {
+          contextParts.push(`Type ${fault.thermocouple_type}`);
+        }
+        if (fault.fault_flags) {
+          contextParts.push(`flags ${fault.fault_flags}`);
+        }
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${formatTimestamp(fault.timestamp_utc)}<div class="subtle">${fault.sample_age}</div></td>
+          <td>${formatTemp(fault.temp_f, fault.temp_c)}</td>
+          <td>${fault.detail || "fault"}</td>
+          <td>${contextParts.join(" • ") || "No extra context"}${fault.last_good_timestamp_utc ? `<div class="subtle">last good ${formatTimestamp(fault.last_good_timestamp_utc)}</div>` : ""}${fault.raw_frame_hex ? `<div class="subtle">frame ${fault.raw_frame_hex}${fault.fault_bits_hex ? ` • bits ${fault.fault_bits_hex}` : ""}</div>` : ""}</td>
+        `;
+        faultsTableBody.appendChild(row);
+      });
+    }
+
+    async function refreshFaults() {
+      const params = new URLSearchParams({
+        range: selectedRange,
+        limit: "100",
+      });
+      if (faultSearch.value.trim()) params.set("search", faultSearch.value.trim());
+      if (faultMinTemp.value) params.set("min_temp_f", faultMinTemp.value);
+      if (faultMaxTemp.value) params.set("max_temp_f", faultMaxTemp.value);
+      if (faultStart.value) params.set("start", new Date(faultStart.value).toISOString());
+      if (faultEnd.value) params.set("end", new Date(faultEnd.value).toISOString());
+      const response = await fetch(`/api/faults?${params.toString()}`);
+      const payload = await response.json();
+      renderDiagnostics(payload.diagnostics || null);
+      renderFaults(payload.faults || []);
+    }
+
+    document.querySelectorAll("button[data-range]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        selectedRange = button.dataset.range;
+        document.querySelectorAll("button[data-range]").forEach((item) => {
+          item.classList.toggle("active", item === button);
+        });
+        await refreshFaults();
+      });
+    });
+
+    document.getElementById("applyFaultFiltersButton").addEventListener("click", async () => {
+      await refreshFaults();
+    });
+
+    document.getElementById("clearFaultFiltersButton").addEventListener("click", async () => {
+      faultSearch.value = "";
+      faultMinTemp.value = "";
+      faultMaxTemp.value = "";
+      faultStart.value = "";
+      faultEnd.value = "";
+      await refreshFaults();
+    });
+
+    refreshFaults();
+    setInterval(refreshFaults, 5000);
+  </script>
+</body>
+</html>

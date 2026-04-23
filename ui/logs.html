@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/shared.css" />
+  <title>Kiln Monitor Firing Logs</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      --bg: #081018;
+      --panel: rgba(13, 23, 39, 0.94);
+      --panel-strong: rgba(17, 31, 52, 0.98);
+      --border: rgba(125, 211, 252, 0.20);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      color: var(--text);
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.20), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.12), transparent 25%),
+        linear-gradient(180deg, #10213a 0%, var(--bg) 58%);
+    }
+    main {
+      max-width: 1480px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.48);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+      min-height: 44px;
+    }
+    .page-link.active-page {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .page-header, .toolbar, .button-row, .summary-strip {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .page-header {
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    .card {
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    }
+    .label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .subtle {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .layout-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(360px, 520px) minmax(0, 1fr);
+      align-items: start;
+    }
+    .detail-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .form-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.66);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+    button, .action-link {
+      border: 1px solid #334155;
+      background: rgba(15, 23, 42, 0.74);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .action-link {
+      cursor: pointer;
+    }
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+      max-height: 560px;
+      overflow: auto;
+    }
+    .log-item {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.50);
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
+    .log-item.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.18);
+    }
+    .log-item-title {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.16);
+      color: #bae6fd;
+      margin-right: 6px;
+    }
+    .summary-tile {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 12px;
+      min-width: 150px;
+      background: rgba(15, 23, 42, 0.44);
+    }
+    .summary-value {
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+    .mini-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 340px;
+      overflow: auto;
+      margin-top: 12px;
+    }
+    .mini-item {
+      border-top: 1px solid rgba(148, 163, 184, 0.14);
+      padding-top: 10px;
+    }
+    .snapshot-link {
+      color: #7dd3fc;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .status-text {
+      min-height: 1.2em;
+      margin-top: 12px;
+      color: #86efac;
+    }
+    .error-text {
+      color: #fca5a5;
+    }
+    @media (max-width: 1040px) {
+      .layout-grid, .detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .page-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link active-page">Logs</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link">Faults</a>
+    </section>
+
+    <section class="page-header">
+      <div>
+        <h1>Firing Logs</h1>
+        <div class="subtle">Create a durable record for each firing with purpose, outcome, post-mortem, linked events, and linked photos.</div>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="refreshLogsButton">Refresh Logs</button>
+        <a id="exportMarkdownLink" class="action-link" href="#" hidden>Export Markdown</a>
+      </div>
+    </section>
+
+    <section class="layout-grid">
+      <section class="card">
+        <div class="label">Firing Log Editor</div>
+        <div class="subtle">Use one log per firing. The linked events and photos are copied into the firing log so the record survives even after historical raw data ages out.</div>
+        <form id="firingLogForm">
+          <div class="form-grid">
+            <div style="grid-column: 1 / -1;">
+              <label for="logTitle">Title</label>
+              <input id="logTitle" placeholder="Cone 6 glaze test with new thermocouple wire" required />
+            </div>
+            <div>
+              <label for="logFiringType">Firing Type</label>
+              <select id="logFiringType">
+                <option value="BISQUE">Bisque</option>
+                <option value="GLAZE">Glaze</option>
+                <option value="TEST">Test</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="logPlannedCone">Planned Cone</label>
+              <input id="logPlannedCone" placeholder="06, 6, etc." />
+            </div>
+            <div>
+              <label for="logResultStatus">Result</label>
+              <select id="logResultStatus">
+                <option value="PENDING">Pending</option>
+                <option value="SUCCESS">Success</option>
+                <option value="MIXED">Mixed</option>
+                <option value="FAILED">Failed</option>
+              </select>
+            </div>
+            <div>
+              <label for="logStartedAt">Start Time</label>
+              <input id="logStartedAt" type="datetime-local" required />
+            </div>
+            <div>
+              <label for="logEndedAt">End Time</label>
+              <input id="logEndedAt" type="datetime-local" />
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="logDescription">Description</label>
+              <textarea id="logDescription" placeholder="What was this firing trying to accomplish? What was loaded into the kiln?"></textarea>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="logResultSummary">Results</label>
+              <textarea id="logResultSummary" placeholder="How did it turn out? Note cone, finish, defects, color, and any practical result notes."></textarea>
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <label for="logPostMortem">Post-Mortem</label>
+              <textarea id="logPostMortem" placeholder="What worked, what failed, what changed, and what should happen before the next firing?"></textarea>
+            </div>
+          </div>
+          <div class="button-row" style="margin-top: 12px;">
+            <button type="submit" id="saveLogButton">Save Log</button>
+            <button type="button" id="newLogButton">New Log</button>
+            <button type="button" id="refreshLinkedDataButton">Refresh Events + Photos</button>
+          </div>
+          <div id="firingLogStatus" class="status-text"></div>
+        </form>
+        <div style="margin-top: 18px; border-top: 1px solid rgba(148, 163, 184, 0.14); padding-top: 16px;">
+          <div class="label">Add Result Photo</div>
+          <div class="subtle">Use this for finished work, cone packs, glaze results, or anything captured after the firing window.</div>
+          <div class="form-grid" style="margin-top: 12px;">
+            <div>
+              <label for="resultPhotoCaption">Caption</label>
+              <input id="resultPhotoCaption" placeholder="Cone pack after cooldown" />
+            </div>
+            <div>
+              <label for="resultPhotoFile">Choose Photo</label>
+              <input id="resultPhotoFile" type="file" accept="image/jpeg,image/png,image/webp" />
+            </div>
+          </div>
+          <div class="button-row" style="margin-top: 12px;">
+            <button type="button" id="uploadResultPhotoButton">Upload Result Photo</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="label">Saved Firing Logs</div>
+        <div class="subtle">Newest logs first. Click a log to load it into the editor and inspect its linked history.</div>
+        <div id="firingLogsList" class="log-list">
+          <div class="subtle">Loading logs...</div>
+        </div>
+      </section>
+    </section>
+
+    <section class="card">
+      <div class="label">Selected Log Summary</div>
+      <div class="summary-strip" id="logSummaryStrip">
+        <div class="summary-tile"><div class="label">Status</div><div class="summary-value">No log selected</div></div>
+      </div>
+    </section>
+
+    <section class="detail-grid">
+      <section class="card">
+        <div class="label">Linked Events</div>
+        <div class="subtle">This is the persistent event snapshot captured for the selected firing log.</div>
+        <div id="linkedEventsList" class="mini-list">
+          <div class="subtle">Select a firing log to inspect linked events.</div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="label">Linked Photos</div>
+        <div class="subtle">Archived snapshots captured during the firing window are copied into the firing log record.</div>
+        <div id="linkedPhotosList" class="mini-list">
+          <div class="subtle">Select a firing log to inspect linked photos.</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const firingLogForm = document.getElementById("firingLogForm");
+    const firingLogsList = document.getElementById("firingLogsList");
+    const firingLogStatus = document.getElementById("firingLogStatus");
+    const logSummaryStrip = document.getElementById("logSummaryStrip");
+    const linkedEventsList = document.getElementById("linkedEventsList");
+    const linkedPhotosList = document.getElementById("linkedPhotosList");
+    const exportMarkdownLink = document.getElementById("exportMarkdownLink");
+    const resultPhotoCaption = document.getElementById("resultPhotoCaption");
+    const resultPhotoFile = document.getElementById("resultPhotoFile");
+    let selectedLogId = null;
+
+    const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText);
+
+    function toLocalInputValue(isoText) {
+      if (!isoText) return "";
+      const value = new Date(isoText);
+      const pad = (input) => String(input).padStart(2, "0");
+      return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+    }
+
+    function fromLocalInputValue(value) {
+      return value ? new Date(value).toISOString() : null;
+    }
+
+    function clearEditor() {
+      selectedLogId = null;
+      firingLogForm.reset();
+      document.getElementById("logFiringType").value = "BISQUE";
+      document.getElementById("logResultStatus").value = "PENDING";
+      firingLogStatus.textContent = "";
+      exportMarkdownLink.hidden = true;
+      exportMarkdownLink.removeAttribute("href");
+      linkedEventsList.innerHTML = '<div class="subtle">Select a firing log to inspect linked events.</div>';
+      linkedPhotosList.innerHTML = '<div class="subtle">Select a firing log to inspect linked photos.</div>';
+      logSummaryStrip.innerHTML = '<div class="summary-tile"><div class="label">Status</div><div class="summary-value">New log</div></div>';
+      document.querySelectorAll(".log-item").forEach((item) => item.classList.remove("active"));
+    }
+
+    function renderLogs(logs) {
+      if (!logs.length) {
+        firingLogsList.innerHTML = '<div class="subtle">No firing logs yet.</div>';
+        return;
+      }
+      firingLogsList.innerHTML = "";
+      logs.forEach((log) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = `log-item${selectedLogId === log.id ? " active" : ""}`;
+        item.dataset.logId = String(log.id);
+        item.innerHTML = `
+          <div class="log-item-title">${log.title}</div>
+          <div style="margin-top: 6px;">
+            <span class="pill">${log.firing_type || "OTHER"}</span>
+            <span class="pill">${log.result_status || "PENDING"}</span>
+          </div>
+          <div class="subtle" style="margin-top: 8px;">${formatTimestamp(log.started_at_utc)}${log.ended_at_utc ? ` to ${formatTimestamp(log.ended_at_utc)}` : ""}</div>
+          <div class="subtle">${log.event_count} events • ${log.snapshot_count} photos</div>
+        `;
+        item.addEventListener("click", async () => {
+          await loadLog(log.id);
+        });
+        firingLogsList.appendChild(item);
+      });
+    }
+
+    function renderSelectedLog(log) {
+      document.getElementById("logTitle").value = log.title || "";
+      document.getElementById("logFiringType").value = log.firing_type || "OTHER";
+      document.getElementById("logPlannedCone").value = log.planned_cone || "";
+      document.getElementById("logResultStatus").value = log.result_status || "PENDING";
+      document.getElementById("logStartedAt").value = toLocalInputValue(log.started_at_utc);
+      document.getElementById("logEndedAt").value = toLocalInputValue(log.ended_at_utc);
+      document.getElementById("logDescription").value = log.description || "";
+      document.getElementById("logResultSummary").value = log.result_summary || "";
+      document.getElementById("logPostMortem").value = log.post_mortem || "";
+      exportMarkdownLink.hidden = false;
+      exportMarkdownLink.href = `/api/firing-logs/${log.id}/export.md`;
+      logSummaryStrip.innerHTML = `
+        <div class="summary-tile"><div class="label">Type</div><div class="summary-value">${log.firing_type || "OTHER"}</div></div>
+        <div class="summary-tile"><div class="label">Result</div><div class="summary-value">${log.result_status || "PENDING"}</div></div>
+        <div class="summary-tile"><div class="label">Events</div><div class="summary-value">${Number(log.event_count || 0)}</div></div>
+        <div class="summary-tile"><div class="label">Photos</div><div class="summary-value">${Number(log.snapshot_count || 0)}</div></div>
+        <div class="summary-tile"><div class="label">Created</div><div class="summary-value">${formatTimestamp(log.created_at)}</div></div>
+      `;
+    }
+
+    function renderLinkedEvents(events) {
+      if (!events.length) {
+        linkedEventsList.innerHTML = '<div class="subtle">No linked events captured for this firing log yet.</div>';
+        return;
+      }
+      linkedEventsList.innerHTML = "";
+      events.forEach((event) => {
+        const item = document.createElement("div");
+        item.className = "mini-item";
+        const captured = event.temp_f !== null && event.temp_f !== undefined
+          ? `${Number(event.temp_f).toFixed(1)} F / ${Number(event.temp_c).toFixed(1)} C`
+          : (event.sample_status || "no sample context");
+        item.innerHTML = `
+          <div><span class="pill">${event.event_type}</span> ${event.label}</div>
+          <div class="subtle">${formatTimestamp(event.timestamp_utc)}</div>
+          <div>${event.detail || ""}</div>
+          <div class="subtle">Captured state: ${captured}${event.sample_detail ? ` • ${event.sample_detail}` : ""}</div>
+        `;
+        linkedEventsList.appendChild(item);
+      });
+    }
+
+    function renderLinkedPhotos(photos) {
+      if (!photos.length) {
+        linkedPhotosList.innerHTML = '<div class="subtle">No linked photos captured for this firing log yet.</div>';
+        return;
+      }
+      linkedPhotosList.innerHTML = "";
+      photos.forEach((photo) => {
+        const item = document.createElement("div");
+        item.className = "mini-item";
+        const sourceLabel = photo.source_type === "RESULT" ? "Result photo" : "Kiln snapshot";
+        item.innerHTML = `
+          <div><span class="pill">${sourceLabel}</span> <a class="snapshot-link" href="${photo.url}" target="_blank" rel="noopener noreferrer">${photo.original_filename || photo.filename}</a></div>
+          <div class="subtle">${formatTimestamp(photo.captured_at_utc)}</div>
+          <div>${photo.caption || ""}</div>
+        `;
+        linkedPhotosList.appendChild(item);
+      });
+    }
+
+    async function refreshLogs() {
+      const response = await fetch("/api/firing-logs");
+      const payload = await response.json();
+      renderLogs(payload.logs || []);
+      if (selectedLogId && (payload.logs || []).some((log) => log.id === selectedLogId)) {
+        await loadLog(selectedLogId, false);
+      }
+    }
+
+    async function loadLog(logId, updateList = true) {
+      const response = await fetch(`/api/firing-logs/${logId}`);
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to load firing log.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      selectedLogId = logId;
+      firingLogStatus.textContent = "";
+      firingLogStatus.classList.remove("error-text");
+      renderSelectedLog(payload.log);
+      renderLinkedEvents(payload.events || []);
+      renderLinkedPhotos(payload.snapshots || []);
+      if (updateList) {
+        await refreshLogs();
+      } else {
+        document.querySelectorAll(".log-item").forEach((item) => item.classList.remove("active"));
+        const matched = Array.from(document.querySelectorAll(".log-item")).find((item) => item.dataset.logId === String(payload.log.id));
+        if (matched) {
+          matched.classList.add("active");
+        }
+      }
+    }
+
+    firingLogForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      firingLogStatus.textContent = "Saving firing log...";
+      firingLogStatus.classList.remove("error-text");
+      const body = {
+        title: document.getElementById("logTitle").value.trim(),
+        firing_type: document.getElementById("logFiringType").value,
+        planned_cone: document.getElementById("logPlannedCone").value.trim(),
+        result_status: document.getElementById("logResultStatus").value,
+        started_at_utc: fromLocalInputValue(document.getElementById("logStartedAt").value),
+        ended_at_utc: fromLocalInputValue(document.getElementById("logEndedAt").value),
+        description: document.getElementById("logDescription").value.trim(),
+        result_summary: document.getElementById("logResultSummary").value.trim(),
+        post_mortem: document.getElementById("logPostMortem").value.trim(),
+      };
+      const url = selectedLogId ? `/api/firing-logs/${selectedLogId}` : "/api/firing-logs";
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to save firing log.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      selectedLogId = payload.id;
+      firingLogStatus.textContent = selectedLogId ? "Firing log saved." : "Firing log created.";
+      await refreshLogs();
+      if (selectedLogId) {
+        await loadLog(selectedLogId);
+      }
+    });
+
+    document.getElementById("refreshLogsButton").addEventListener("click", async () => {
+      await refreshLogs();
+    });
+
+    document.getElementById("newLogButton").addEventListener("click", () => {
+      clearEditor();
+    });
+
+    document.getElementById("refreshLinkedDataButton").addEventListener("click", async () => {
+      if (!selectedLogId) {
+        firingLogStatus.textContent = "Save the firing log first so events and photos can be linked.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      firingLogStatus.textContent = "Refreshing linked events and photos...";
+      firingLogStatus.classList.remove("error-text");
+      const response = await fetch(`/api/firing-logs/${selectedLogId}/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to refresh linked data.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      firingLogStatus.textContent = "Linked events and photos refreshed.";
+      await loadLog(selectedLogId);
+      await refreshLogs();
+    });
+
+    document.getElementById("uploadResultPhotoButton").addEventListener("click", async () => {
+      if (!selectedLogId) {
+        firingLogStatus.textContent = "Save the firing log first so result photos have a log to attach to.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      const file = resultPhotoFile.files && resultPhotoFile.files[0];
+      if (!file) {
+        firingLogStatus.textContent = "Choose a photo to upload.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      firingLogStatus.textContent = "Uploading result photo...";
+      firingLogStatus.classList.remove("error-text");
+      const fileBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(fileBuffer);
+      let binary = "";
+      bytes.forEach((value) => {
+        binary += String.fromCharCode(value);
+      });
+      const contentBase64 = btoa(binary);
+      const response = await fetch(`/api/firing-logs/${selectedLogId}/photos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          mime_type: file.type,
+          caption: resultPhotoCaption.value.trim(),
+          content_base64: contentBase64,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to upload result photo.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      resultPhotoCaption.value = "";
+      resultPhotoFile.value = "";
+      firingLogStatus.textContent = "Result photo uploaded.";
+      await loadLog(selectedLogId);
+      await refreshLogs();
+    });
+
+    clearEditor();
+    refreshLogs();
+  </script>
+</body>
+</html>

@@ -1,0 +1,2923 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/shared.css" />
+  <title>Kiln Monitor Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Avenir Next", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background: var(--page-bg);
+      color: #e5e7eb;
+      --accent-color: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.18);
+      --page-bg: #0b1220;
+      --page-bg-secondary: #131d31;
+      --panel-bg: #111827;
+      --panel-border: rgba(56, 189, 248, 0.18);
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 28%),
+        linear-gradient(180deg, var(--page-bg-secondary), var(--page-bg));
+      min-height: 100vh;
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 16px;
+      font-size: 2rem;
+    }
+    .status-banner {
+      padding: 14px 16px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+      font-weight: 700;
+      background: #334155;
+      border: 1px solid var(--accent-color);
+      box-shadow: inset 0 0 0 1px var(--accent-soft);
+    }
+    .status-ok {
+      background: #065f46;
+    }
+    .status-error {
+      background: #991b1b;
+    }
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+      padding: 0;
+    }
+    .cards {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-bottom: 20px;
+    }
+    .main-column {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+    }
+    .layout-zone {
+      display: grid;
+      gap: 12px;
+      min-height: 72px;
+      align-content: start;
+    }
+    .layout-zone.layout-zone-cards {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    .layout-zone.drag-target-zone {
+      outline: 2px dashed var(--accent-color);
+      outline-offset: 8px;
+      border-radius: 18px;
+    }
+    .zone-label {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .card {
+      background:
+        linear-gradient(180deg, rgba(17, 31, 52, 0.98), rgba(13, 23, 39, 0.94));
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.45);
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .card.layout-edit {
+      cursor: grab;
+    }
+    .card.dragging {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+    .card.drag-target {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      word-break: break-word;
+    }
+    .chart-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .chart-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .range-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .history-filter-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: end;
+      margin: 10px 0 12px;
+    }
+    .history-filter-field {
+      min-width: 180px;
+      flex: 1 1 180px;
+    }
+    .page-link {
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      background: rgba(15, 23, 42, 0.48);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 8px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 700;
+    }
+    .page-link.active-page {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      color: #e5e7eb;
+    }
+    .nav-button, button {
+      border: 1px solid #334155;
+      background: #1f2937;
+      color: #e5e7eb;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    button.active {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    canvas {
+      width: 100%;
+      height: 420px;
+      display: block;
+    }
+    .subtle {
+      color: #9ca3af;
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+    .rules-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 0;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 30;
+    }
+    .modal-backdrop[hidden] {
+      display: none;
+    }
+    .modal-panel {
+      width: min(720px, 100%);
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.55);
+    }
+    .modal-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .modal-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      margin-bottom: 16px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-actions-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tab-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .tab-button {
+      background: transparent;
+      border-color: #334155;
+    }
+    .tab-button.active {
+      background: var(--accent-soft);
+      border-color: var(--accent-color);
+      color: #f8fafc;
+    }
+    .tab-panel[hidden] {
+      display: none;
+    }
+    .rules-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+      margin-bottom: 16px;
+    }
+    .rules-table-wrap {
+      overflow-x: auto;
+      margin: 0 -4px;
+      padding: 0 4px;
+    }
+    .tab-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .delivery-summary {
+      color: #9ca3af;
+      font-size: 0.9rem;
+      margin-bottom: 0;
+    }
+    .delivery-detail {
+      min-width: 220px;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .channel-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .channel-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: rgba(51, 65, 85, 0.9);
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .channel-toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .panel-divider {
+      border: 0;
+      border-top: 1px solid #273449;
+      margin: 14px 0;
+    }
+    .channel-sections {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .channel-section {
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .channel-section-title {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .channel-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 12px;
+    }
+    .test-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .test-status {
+      min-height: 1.2em;
+      margin-bottom: 12px;
+    }
+    .channel-health {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .channel-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+    }
+    .channel-status-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .channel-status-name {
+      font-weight: 700;
+      min-width: 56px;
+    }
+    .channel-test-button {
+      flex: 0 0 auto;
+    }
+    .pill-warning {
+      background: #7c2d12;
+    }
+    .success-text {
+      color: #86efac;
+      min-height: 1.2em;
+    }
+    .watchdog-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 12px;
+    }
+    .profiles-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .profile-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .profile-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .profile-summary-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .profile-summary-card .value {
+      font-size: 1rem;
+    }
+    .profile-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 12px;
+    }
+    .profile-segments-table input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .profile-segments-table td {
+      vertical-align: top;
+    }
+    .profile-list-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .profile-empty {
+      color: #9ca3af;
+      padding: 12px 0;
+    }
+    .camera-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .camera-shell {
+      display: grid;
+      grid-template-columns: minmax(360px, 1.15fr) minmax(280px, 0.85fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .camera-preview-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .camera-side-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+    .camera-preview-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.4);
+    }
+    .camera-preview-wrap {
+      position: relative;
+      margin-top: 8px;
+    }
+    .camera-preview {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: #020617;
+      display: block;
+    }
+    .camera-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 120px;
+      border-radius: 14px;
+      border: 1px dashed #334155;
+      color: #94a3b8;
+      background: rgba(2, 6, 23, 0.55);
+      text-align: center;
+      padding: 16px;
+    }
+    .camera-timestamp {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.82);
+      color: #f8fafc;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(4px);
+    }
+    .camera-meta {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .camera-meta-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .camera-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .camera-archive {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.38);
+      padding: 10px;
+      max-height: 720px;
+      overflow-y: auto;
+    }
+    .camera-archive-list {
+      display: grid;
+      gap: 8px;
+    }
+    .camera-link {
+      width: 100%;
+      text-align: left;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #111827;
+      border: 1px solid #334155;
+    }
+    .camera-link.active {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      background: rgba(37, 99, 235, 0.22);
+    }
+    .camera-link-title {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .camera-link-meta {
+      display: block;
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+    .ops-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    }
+    .ops-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .ops-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .ops-item {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .ops-item-top {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .ops-item-label {
+      font-weight: 700;
+    }
+    .ops-item-time {
+      color: #9ca3af;
+      font-size: 0.85rem;
+    }
+    .ops-item-detail {
+      color: #cbd5e1;
+      font-size: 0.92rem;
+    }
+    .event-form-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    .filter-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 14px;
+    }
+    .diagnostics-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 14px;
+    }
+    .diagnostic-card {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.38);
+    }
+    .diagnostic-card .value {
+      font-size: 1.05rem;
+    }
+    .event-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: #bae6fd;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    label {
+      display: block;
+      color: #9ca3af;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .rule-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 640px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-top: 1px solid #1f2937;
+      font-size: 0.95rem;
+      vertical-align: top;
+    }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      background: #334155;
+    }
+    .pill-on {
+      background: #065f46;
+    }
+    .pill-off {
+      background: #475569;
+    }
+    .pill-active {
+      background: #7c2d12;
+    }
+    .error-text {
+      color: #fca5a5;
+      min-height: 1.2em;
+    }
+    .color-input {
+      height: 46px;
+      padding: 6px;
+    }
+    .color-swatch {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      margin-right: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      vertical-align: middle;
+    }
+    .card-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .mini-button {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+    @media (max-width: 720px) {
+      body {
+        padding: 14px;
+      }
+      .toolbar {
+        padding: 14px;
+      }
+      .chart-top {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      canvas {
+        height: 320px;
+      }
+      .camera-shell {
+        grid-template-columns: 1fr;
+      }
+      .camera-side-panel {
+        order: -1;
+      }
+      .ops-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Kiln Monitor</h1>
+    <section class="page-nav" aria-label="Pages">
+      <a href="/" class="page-link active-page">Dashboard</a>
+      <a href="/panel" class="page-link">Panel</a>
+      <a href="/logs" class="page-link">Logs</a>
+      <a href="/alerts" class="page-link">Alerts</a>
+      <a href="/events" class="page-link">Events</a>
+      <a href="/faults" class="page-link">Faults</a>
+    </section>
+    <section class="toolbar">
+      <button type="button" id="openSetupButton">Dashboard Setup</button>
+      <button type="button" id="resetFaultsButton">Reset Faults</button>
+      <button type="button" id="resetAlertsButton">Reset Alerts</button>
+    </section>
+    <div id="statusBanner" class="status-banner">Loading...</div>
+
+    <div id="setupModal" class="modal-backdrop" hidden>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="setupModalTitle">
+        <div class="modal-header">
+          <div>
+            <div class="label" id="setupModalTitle">Dashboard Setup</div>
+            <div class="subtle">Adjust colors, units, and layout when you need to, then tuck it away.</div>
+          </div>
+          <button type="button" id="closeSetupButton">Close</button>
+        </div>
+
+        <div class="modal-grid">
+          <div>
+            <label for="accentColorPicker">Accent Color</label>
+            <input id="accentColorPicker" class="color-input" type="color" value="#38bdf8" />
+          </div>
+          <div>
+            <label for="pageBgPicker">Page Background</label>
+            <input id="pageBgPicker" class="color-input" type="color" value="#0b1220" />
+          </div>
+          <div>
+            <label for="panelBgPicker">Panel Background</label>
+            <input id="panelBgPicker" class="color-input" type="color" value="#111827" />
+          </div>
+          <div>
+            <label for="unitSelect">Display Units</label>
+            <select id="unitSelect">
+              <option value="F">Fahrenheit</option>
+              <option value="C">Celsius</option>
+              <option value="BOTH">Both</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <div class="modal-actions-group">
+            <button type="button" id="layoutToggle">Edit Layout</button>
+            <button type="button" id="resetColorsButton">Reset Colors</button>
+          </div>
+          <div class="subtle">Drag cards between zones while layout edit mode is on.</div>
+        </div>
+      </section>
+    </div>
+
+    <div class="main-column">
+        <section>
+          <div class="zone-label">Top Summary</div>
+          <div class="layout-zone layout-zone-cards" id="topSummaryZone" data-zone-id="top-summary"></div>
+        </section>
+
+        <section class="chart-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Temperature Trend</div>
+              <div class="subtle" id="chartMeta">--</div>
+            </div>
+            <div class="range-buttons">
+              <select id="resolutionSelect" aria-label="Chart resolution">
+                <option value="auto">Auto</option>
+              </select>
+              <button type="button" id="smoothToggle" class="active">Smooth</button>
+              <button type="button" data-range="1h">1h</button>
+              <button type="button" data-range="24h" class="active">24h</button>
+              <button type="button" data-range="7d">7d</button>
+            </div>
+          </div>
+          <div class="history-filter-bar">
+            <div class="history-filter-field">
+              <label for="historyStart">History Start</label>
+              <input id="historyStart" type="datetime-local" />
+            </div>
+            <div class="history-filter-field">
+              <label for="historyEnd">History End</label>
+              <input id="historyEnd" type="datetime-local" />
+            </div>
+            <button type="button" id="applyHistoryFilterButton">Apply Time Filter</button>
+            <button type="button" id="clearHistoryFilterButton">Clear Filter</button>
+          </div>
+          <canvas id="tempChart"></canvas>
+          <div class="subtle">Red dots mark fault samples. Gaps show periods where no valid temperature was logged.</div>
+        </section>
+
+        <section>
+          <div class="zone-label">Below Chart</div>
+          <div class="layout-zone layout-zone-cards" id="belowChartZone" data-zone-id="below-chart"></div>
+        </section>
+
+        <section class="profiles-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Profiles</div>
+              <div class="subtle">Track a planned firing profile now so the monitor can show expected progression before we ever touch control logic.</div>
+            </div>
+          </div>
+
+          <div id="profileStatusMessage" class="success-text"></div>
+
+          <div class="profile-summary" id="activeProfileSummary">
+            <div class="profile-summary-card">
+              <div class="label">Tracking</div>
+              <div class="value" id="activeProfileName">No active profile</div>
+            </div>
+            <div class="profile-summary-card">
+              <div class="label">Segment</div>
+              <div class="value" id="activeProfileSegment">--</div>
+            </div>
+            <div class="profile-summary-card">
+              <div class="label">Expected Temp</div>
+              <div class="value" id="activeProfileExpectedTemp">--</div>
+            </div>
+            <div class="profile-summary-card">
+              <div class="label">Elapsed</div>
+              <div class="value" id="activeProfileElapsed">--</div>
+            </div>
+          </div>
+
+          <div class="profile-toolbar">
+            <button type="button" id="profileStopButton">Stop Tracking</button>
+            <button type="button" id="profileRefreshButton">Reload Profiles</button>
+          </div>
+
+          <hr class="panel-divider" />
+
+          <form id="profileForm">
+            <div class="profile-grid">
+              <div>
+                <label for="profileName">Profile Name</label>
+                <input id="profileName" type="text" placeholder="Cone 06 glaze" required />
+              </div>
+              <div>
+                <label for="profileCone">Cone</label>
+                <input id="profileCone" type="text" placeholder="06" />
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label for="profileDescription">Description</label>
+                <input id="profileDescription" type="text" placeholder="Low-fire glaze schedule with hold at top." />
+              </div>
+            </div>
+
+            <div class="profile-toolbar">
+              <button type="button" id="addSegmentButton">Add Segment</button>
+            </div>
+
+            <div class="rules-table-wrap profile-segments-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Segment</th>
+                    <th>Target C</th>
+                    <th>Ramp C/hr</th>
+                    <th>Soak Min</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="profileSegmentsBody">
+                  <tr><td colspan="5" class="subtle">Add at least one segment.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="profile-toolbar">
+              <button type="submit" id="profileSubmit">Save Profile</button>
+              <button type="button" id="profileCancel">Cancel Edit</button>
+            </div>
+            <div id="profileError" class="error-text"></div>
+          </form>
+
+          <hr class="panel-divider" />
+
+          <div class="rules-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Cone</th>
+                  <th>Segments</th>
+                  <th>Duration</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="profilesTableBody">
+                <tr><td colspan="5" class="subtle">Loading profiles...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="camera-panel">
+          <div class="chart-top">
+            <div>
+              <div class="label">Camera</div>
+              <div class="subtle">Keep the newest capture fixed on top, and click any archived snapshot to inspect it below.</div>
+            </div>
+          </div>
+
+          <div class="camera-shell">
+            <div class="camera-preview-grid">
+              <div class="camera-preview-card">
+                <div class="label">Selected Snapshot</div>
+                <div class="camera-preview-wrap">
+                  <div id="cameraSelectedEmptyState" class="camera-empty" hidden></div>
+                  <img id="cameraSelectedPreview" class="camera-preview" alt="Selected kiln camera snapshot" hidden />
+                  <div id="cameraSelectedTimestampBadge" class="camera-timestamp" hidden>--</div>
+                </div>
+              </div>
+
+              <div class="camera-preview-card">
+                <div class="label">Latest Snapshot</div>
+                <div class="camera-preview-wrap">
+                  <div id="cameraLatestEmptyState" class="camera-empty" hidden></div>
+                  <img id="cameraLatestPreview" class="camera-preview" alt="Latest kiln camera snapshot" hidden />
+                  <div id="cameraLatestTimestampBadge" class="camera-timestamp" hidden>--</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="camera-side-panel">
+              <div class="label" style="margin-top: 16px;">Recent Snapshots</div>
+              <div class="subtle">Showing the 20 most recent captures in your current time zone.</div>
+              <div class="camera-archive">
+                <div id="cameraArchiveList" class="camera-archive-list">
+                  <div class="subtle">Loading snapshots...</div>
+                </div>
+              </div>
+
+              <div class="camera-meta">
+                <div class="camera-meta-card">
+                  <div class="label">Latest Capture</div>
+                  <div class="value" id="cameraLatestCapturedAt">--</div>
+                </div>
+              </div>
+
+              <div class="camera-actions">
+                <button type="button" id="captureSnapshotButton">Capture Snapshot</button>
+                <button type="button" id="refreshSnapshotButton">Refresh Camera</button>
+              </div>
+              <div id="cameraStatusMessage" class="success-text"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+    <div id="cardTemplates" hidden>
+      <div class="card" data-card-id="latest-temp">
+        <div class="label">Latest Temperature</div>
+        <div class="value" id="latestTemp">--</div>
+      </div>
+      <div class="card" data-card-id="last-update">
+        <div class="label">Last Update</div>
+        <div class="value" id="lastUpdate">--</div>
+      </div>
+      <div class="card" data-card-id="sample-age">
+        <div class="label">Sample Age</div>
+        <div class="value" id="sampleAge">--</div>
+      </div>
+      <div class="card" data-card-id="last-fault">
+        <div class="label">Last Fault</div>
+        <div class="value" id="lastFault">--</div>
+        <div class="card-actions">
+          <button type="button" class="mini-button" id="inlineResetFaultsButton">Reset Faults</button>
+        </div>
+      </div>
+      <div class="card" data-card-id="total-rows">
+        <div class="label">Total Rows</div>
+        <div class="value" id="totalRows">--</div>
+      </div>
+      <div class="card" data-card-id="last-alert">
+        <div class="label">Last Alert</div>
+        <div class="value" id="lastAlert">--</div>
+        <div class="card-actions">
+          <button type="button" class="mini-button" id="inlineResetAlertsButton">Reset Alerts</button>
+        </div>
+      </div>
+      <div class="card" data-card-id="active-profile">
+        <div class="label">Active Profile</div>
+        <div class="value" id="activeProfileCard">none</div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script>
+    const banner = document.getElementById("statusBanner");
+    const latestTemp = document.getElementById("latestTemp");
+    const lastUpdate = document.getElementById("lastUpdate");
+    const sampleAge = document.getElementById("sampleAge");
+    const lastFault = document.getElementById("lastFault");
+    const totalRows = document.getElementById("totalRows");
+    const lastAlert = document.getElementById("lastAlert");
+    const activeProfileCard = document.getElementById("activeProfileCard");
+    const chartMeta = document.getElementById("chartMeta");
+    const ruleForm = document.getElementById("ruleForm");
+    const ruleSubmit = document.getElementById("ruleSubmit");
+    const ruleCancel = document.getElementById("ruleCancel");
+    const ruleError = document.getElementById("ruleError");
+    const rulesTableBody = document.getElementById("rulesTableBody");
+    const deliveriesTableBody = document.getElementById("deliveriesTableBody");
+    const deliveriesSummary = document.getElementById("deliveriesSummary");
+    const channelHealth = document.getElementById("channelHealth");
+    const emailEnabled = document.getElementById("emailEnabled");
+    const emailSmtpHost = document.getElementById("emailSmtpHost");
+    const emailSmtpPort = document.getElementById("emailSmtpPort");
+    const emailStarttls = document.getElementById("emailStarttls");
+    const emailUsername = document.getElementById("emailUsername");
+    const emailPassword = document.getElementById("emailPassword");
+    const emailFromAddr = document.getElementById("emailFromAddr");
+    const emailToAddr = document.getElementById("emailToAddr");
+    const smsEnabled = document.getElementById("smsEnabled");
+    const smsAccountSid = document.getElementById("smsAccountSid");
+    const smsAuthToken = document.getElementById("smsAuthToken");
+    const smsFromNumber = document.getElementById("smsFromNumber");
+    const smsToNumber = document.getElementById("smsToNumber");
+    const pushEnabled = document.getElementById("pushEnabled");
+    const pushWebhookUrl = document.getElementById("pushWebhookUrl");
+    const saveChannelSettingsButton = document.getElementById("saveChannelSettingsButton");
+    const resetChannelSettingsButton = document.getElementById("resetChannelSettingsButton");
+    const channelSettingsStatus = document.getElementById("channelSettingsStatus");
+    const testAlertStatus = document.getElementById("testAlertStatus");
+    const watchdogFaultStreakThreshold = document.getElementById("watchdogFaultStreakThreshold");
+    const watchdogStaleDataSeconds = document.getElementById("watchdogStaleDataSeconds");
+    const watchdogCooldownMinutes = document.getElementById("watchdogCooldownMinutes");
+    const saveWatchdogSettingsButton = document.getElementById("saveWatchdogSettingsButton");
+    const resetWatchdogSettingsButton = document.getElementById("resetWatchdogSettingsButton");
+    const watchdogSettingsStatus = document.getElementById("watchdogSettingsStatus");
+    const profileForm = document.getElementById("profileForm");
+    const profileSubmit = document.getElementById("profileSubmit");
+    const profileCancel = document.getElementById("profileCancel");
+    const profileError = document.getElementById("profileError");
+    const profileSegmentsBody = document.getElementById("profileSegmentsBody");
+    const profilesTableBody = document.getElementById("profilesTableBody");
+    const addSegmentButton = document.getElementById("addSegmentButton");
+    const profileStopButton = document.getElementById("profileStopButton");
+    const profileRefreshButton = document.getElementById("profileRefreshButton");
+    const profileStatusMessage = document.getElementById("profileStatusMessage");
+    const activeProfileName = document.getElementById("activeProfileName");
+    const activeProfileSegment = document.getElementById("activeProfileSegment");
+    const activeProfileExpectedTemp = document.getElementById("activeProfileExpectedTemp");
+    const activeProfileElapsed = document.getElementById("activeProfileElapsed");
+    const cameraLatestPreview = document.getElementById("cameraLatestPreview");
+    const cameraLatestEmptyState = document.getElementById("cameraLatestEmptyState");
+    const cameraLatestTimestampBadge = document.getElementById("cameraLatestTimestampBadge");
+    const cameraLatestCapturedAt = document.getElementById("cameraLatestCapturedAt");
+    const cameraSelectedPreview = document.getElementById("cameraSelectedPreview");
+    const cameraSelectedEmptyState = document.getElementById("cameraSelectedEmptyState");
+    const cameraSelectedTimestampBadge = document.getElementById("cameraSelectedTimestampBadge");
+    const cameraArchiveList = document.getElementById("cameraArchiveList");
+    const cameraStatusMessage = document.getElementById("cameraStatusMessage");
+    const captureSnapshotButton = document.getElementById("captureSnapshotButton");
+    const refreshSnapshotButton = document.getElementById("refreshSnapshotButton");
+    const eventForm = document.getElementById("eventForm");
+    const eventStatus = document.getElementById("eventStatus");
+    const eventList = document.getElementById("eventList");
+    const diagnosticsGrid = document.getElementById("diagnosticsGrid");
+    const topSummaryZone = document.getElementById("topSummaryZone");
+    const belowChartZone = document.getElementById("belowChartZone");
+    const layoutZones = [topSummaryZone, belowChartZone];
+    const canvas = document.getElementById("tempChart");
+    const ctx = canvas.getContext("2d");
+    const resolutionSelect = document.getElementById("resolutionSelect");
+    const historyStart = document.getElementById("historyStart");
+    const historyEnd = document.getElementById("historyEnd");
+    const applyHistoryFilterButton = document.getElementById("applyHistoryFilterButton");
+    const clearHistoryFilterButton = document.getElementById("clearHistoryFilterButton");
+    const unitSelect = document.getElementById("unitSelect");
+    const layoutToggle = document.getElementById("layoutToggle");
+    const openSetupButton = document.getElementById("openSetupButton");
+    const closeSetupButton = document.getElementById("closeSetupButton");
+    const setupModal = document.getElementById("setupModal");
+    const accentColorPicker = document.getElementById("accentColorPicker");
+    const pageBgPicker = document.getElementById("pageBgPicker");
+    const panelBgPicker = document.getElementById("panelBgPicker");
+    const ruleThresholdLabel = document.getElementById("ruleThresholdLabel");
+    const ruleHysteresisLabel = document.getElementById("ruleHysteresisLabel");
+    const alertTabButtons = Array.from(document.querySelectorAll("[data-alert-tab]"));
+    const alertTabPanels = Array.from(document.querySelectorAll("[data-alert-tab-panel]"));
+    let selectedRange = "24h";
+    let selectedResolution = "auto";
+    let customHistoryActive = false;
+    let selectedUnit = "F";
+    let hoverX = null;
+    let smoothingEnabled = true;
+    let editingRuleId = null;
+    let currentAccentColor = "#38bdf8";
+    let baseAccentColor = "#38bdf8";
+    let layoutEditEnabled = false;
+    const HISTORY_BUCKET_PRESETS = {"1h":[2,10,30,60,300],"24h":[60,300,600,900,1800],"7d":[300,600,1800,3600,10800]};
+    let currentRules = [];
+    let currentDeliveries = [];
+    let alertChannelStatus = {};
+    let alertChannelSettings = {};
+    let watchdogSettings = {};
+    let currentProfiles = [];
+    let currentProfileRun = null;
+    let editingProfileId = null;
+    let editingProfileSegments = [];
+    let currentCameraStatus = null;
+    let selectedCameraSnapshot = null;
+    let currentEvents = [];
+    let chartState = {
+      points: [],
+      plotPoints: [],
+      overlayPoints: [],
+      events: [],
+    };
+
+    function setActiveAlertTab(tabName) {
+      if (!alertTabButtons.length || !alertTabPanels.length) {
+        return;
+      }
+      alertTabButtons.forEach((button) => {
+        const isActive = button.dataset.alertTab === tabName;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      alertTabPanels.forEach((panel) => {
+        panel.hidden = panel.dataset.alertTabPanel !== tabName;
+      });
+    }
+
+    function setSetupModalOpen(isOpen) {
+      setupModal.hidden = !isOpen;
+    }
+
+    function renderChannelHealth() {
+      const channelLabels = {
+        EMAIL: "Email",
+        SMS: "SMS",
+        PUSH: "Slack",
+      };
+      channelHealth.innerHTML = "";
+      ["EMAIL", "SMS", "PUSH"].forEach((channel) => {
+        const configured = Boolean(alertChannelStatus[channel]);
+        const row = document.createElement("div");
+        row.className = "channel-status-row";
+        const statusClass = configured ? "pill pill-on" : "pill pill-warning";
+        const statusText = configured ? "Configured" : "Not Configured";
+        row.innerHTML = `
+          <div class="channel-status-main">
+            <div class="channel-status-name">${channelLabels[channel]}</div>
+            <span class="${statusClass}">${statusText}</span>
+          </div>
+          <button type="button" class="channel-test-button" data-test-channel="${channel}" ${configured ? "" : "disabled"}>Test</button>
+        `;
+        channelHealth.appendChild(row);
+      });
+
+      channelHealth.querySelectorAll("[data-test-channel]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await sendTestAlert([button.dataset.testChannel]);
+        });
+      });
+    }
+
+    function populateChannelSettingsForm(settings) {
+      alertChannelSettings = settings || {};
+      const email = alertChannelSettings.email || {};
+      const sms = alertChannelSettings.sms || {};
+      const slack = alertChannelSettings.slack || alertChannelSettings.push || {};
+
+      emailEnabled.value = String(Boolean(email.enabled));
+      emailSmtpHost.value = email.smtp_host || "";
+      emailSmtpPort.value = email.smtp_port ?? 587;
+      emailStarttls.value = String(Boolean(email.starttls));
+      emailUsername.value = email.username || "";
+      emailPassword.value = email.password || "";
+      emailFromAddr.value = email.from_addr || "";
+      emailToAddr.value = email.to_addr || "";
+
+      smsEnabled.value = String(Boolean(sms.enabled));
+      smsAccountSid.value = sms.account_sid || "";
+      smsAuthToken.value = sms.auth_token || "";
+      smsFromNumber.value = sms.from_number || "";
+      smsToNumber.value = sms.to_number || "";
+
+      pushEnabled.value = String(Boolean(slack.enabled));
+      pushWebhookUrl.value = slack.webhook_url || "";
+    }
+
+    function gatherChannelSettings() {
+      return {
+        email: {
+          enabled: emailEnabled.value === "true",
+          smtp_host: emailSmtpHost.value.trim(),
+          smtp_port: Number(emailSmtpPort.value || "587"),
+          starttls: emailStarttls.value === "true",
+          username: emailUsername.value.trim(),
+          password: emailPassword.value,
+          from_addr: emailFromAddr.value.trim(),
+          to_addr: emailToAddr.value.trim(),
+        },
+        sms: {
+          enabled: smsEnabled.value === "true",
+          account_sid: smsAccountSid.value.trim(),
+          auth_token: smsAuthToken.value,
+          from_number: smsFromNumber.value.trim(),
+          to_number: smsToNumber.value.trim(),
+        },
+        slack: {
+          enabled: pushEnabled.value === "true",
+          webhook_url: pushWebhookUrl.value.trim(),
+        },
+      };
+    }
+
+    function populateWatchdogSettingsForm(settings) {
+      watchdogSettings = settings || {};
+      watchdogFaultStreakThreshold.value = watchdogSettings.fault_streak_threshold ?? 5;
+      watchdogStaleDataSeconds.value = watchdogSettings.stale_data_seconds ?? 30;
+      watchdogCooldownMinutes.value = watchdogSettings.notify_cooldown_minutes ?? 30;
+    }
+
+    function gatherWatchdogSettings() {
+      return {
+        fault_streak_threshold: Number(watchdogFaultStreakThreshold.value || "5"),
+        stale_data_seconds: Number(watchdogStaleDataSeconds.value || "30"),
+        notify_cooldown_minutes: Number(watchdogCooldownMinutes.value || "30"),
+      };
+    }
+
+    const formatTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText);
+
+    const formatCompactTimestamp = (isoText) => window.KilnUI.formatTimestamp(isoText, {
+      hour: "numeric",
+      minute: "2-digit",
+      month: "short",
+      day: "numeric",
+    });
+
+    const humanizeRuleType = (ruleType) => window.KilnUI.humanizeRuleType(ruleType);
+
+    function fToC(tempF) {
+      return (tempF - 32.0) * 5.0 / 9.0;
+    }
+
+    function cToF(tempC) {
+      return (tempC * 9.0 / 5.0) + 32.0;
+    }
+
+    function unitSuffix() {
+      return selectedUnit === "C" ? "C" : "F";
+    }
+
+    function displayTempFromStoredF(tempF) {
+      if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
+        return null;
+      }
+      return selectedUnit === "C" ? fToC(tempF) : tempF;
+    }
+
+    function displayDeltaFromStoredF(tempF) {
+      if (tempF === null || tempF === undefined || !Number.isFinite(tempF)) {
+        return null;
+      }
+      return selectedUnit === "C" ? (tempF * 5.0 / 9.0) : tempF;
+    }
+
+    function formatPrimaryTemperature(tempF, tempC) {
+      if (tempF === null || tempC === null || tempF === undefined || tempC === undefined) {
+        return "--";
+      }
+      if (selectedUnit === "C") {
+        return `${tempC.toFixed(1)} C`;
+      }
+      if (selectedUnit === "BOTH") {
+        return `${tempF.toFixed(1)} F / ${tempC.toFixed(1)} C`;
+      }
+      return `${tempF.toFixed(1)} F`;
+    }
+
+    function formatRuleTemperatureFromStoredF(tempF) {
+      const converted = displayTempFromStoredF(tempF);
+      return converted === null ? "--" : `${converted.toFixed(1)} ${unitSuffix()}`;
+    }
+
+    function formatRuleDeltaFromStoredF(tempF) {
+      const converted = displayDeltaFromStoredF(tempF);
+      return converted === null ? "--" : `${converted.toFixed(1)} ${unitSuffix()}`;
+    }
+
+    function convertRuleInputToStoredF(value) {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+      return selectedUnit === "C" ? cToF(numericValue) : numericValue;
+    }
+
+    function convertStoredFToRuleInput(value) {
+      if (!Number.isFinite(value)) {
+        return value;
+      }
+      return selectedUnit === "C" ? fToC(value) : value;
+    }
+
+    function updateRuleUnitLabels() {
+      const ruleTypeInput = document.getElementById("ruleType");
+      const thresholdLabel = document.getElementById("ruleThresholdLabel");
+      const hysteresisLabel = document.getElementById("ruleHysteresisLabel");
+      const hysteresisInput = document.getElementById("ruleHysteresis");
+      if (!ruleTypeInput || !thresholdLabel || !hysteresisLabel || !hysteresisInput) {
+        return;
+      }
+      const ruleType = ruleTypeInput.value;
+      const suffix = unitSuffix();
+      if (ruleType === "TIME_ELAPSED") {
+        thresholdLabel.textContent = "Elapsed Minutes";
+        hysteresisLabel.textContent = "Reset Gap";
+        hysteresisInput.disabled = true;
+        hysteresisInput.value = "0";
+      } else {
+        thresholdLabel.textContent = `Threshold ${suffix}`;
+        hysteresisLabel.textContent = `Reset Gap ${suffix}`;
+        hysteresisInput.disabled = false;
+      }
+    }
+
+    function formatDuration(seconds) {
+      if (!Number.isFinite(seconds) || seconds <= 0) {
+        return "0m";
+      }
+      const totalMinutes = Math.round(seconds / 60);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      if (hours <= 0) {
+        return `${minutes}m`;
+      }
+      return `${hours}h ${minutes}m`;
+    }
+
+    function emptyProfileSegment() {
+      return {
+        name: "",
+        target_temp_c: 999,
+        ramp_rate_c_per_hour: 120,
+        soak_minutes: 0,
+      };
+    }
+
+    function resetProfileForm() {
+      editingProfileId = null;
+      editingProfileSegments = [emptyProfileSegment()];
+      document.getElementById("profileName").value = "";
+      document.getElementById("profileCone").value = "";
+      document.getElementById("profileDescription").value = "";
+      profileSubmit.textContent = "Save Profile";
+      profileError.textContent = "";
+      renderProfileSegmentsEditor();
+    }
+
+    function renderProfileSegmentsEditor() {
+      if (!editingProfileSegments.length) {
+        profileSegmentsBody.innerHTML = '<tr><td colspan="5" class="subtle">Add at least one segment.</td></tr>';
+        return;
+      }
+
+      profileSegmentsBody.innerHTML = "";
+      editingProfileSegments.forEach((segment, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><input type="text" data-segment-field="name" data-segment-index="${index}" value="${segment.name || ""}" placeholder="Warmup" /></td>
+          <td><input type="number" step="0.1" data-segment-field="target_temp_c" data-segment-index="${index}" value="${Number(segment.target_temp_c ?? 0)}" /></td>
+          <td><input type="number" step="0.1" min="0.1" data-segment-field="ramp_rate_c_per_hour" data-segment-index="${index}" value="${Number(segment.ramp_rate_c_per_hour ?? 0)}" /></td>
+          <td><input type="number" step="0.1" min="0" data-segment-field="soak_minutes" data-segment-index="${index}" value="${Number(segment.soak_minutes ?? 0)}" /></td>
+          <td><button type="button" data-remove-segment="${index}">Remove</button></td>
+        `;
+        profileSegmentsBody.appendChild(row);
+      });
+
+      profileSegmentsBody.querySelectorAll("[data-segment-field]").forEach((input) => {
+        input.addEventListener("input", (event) => {
+          const target = event.target;
+          const index = Number(target.dataset.segmentIndex);
+          const field = target.dataset.segmentField;
+          const rawValue = target.value;
+          editingProfileSegments[index][field] = field === "name" ? rawValue : Number(rawValue);
+        });
+      });
+
+      profileSegmentsBody.querySelectorAll("[data-remove-segment]").forEach((button) => {
+        button.addEventListener("click", () => {
+          editingProfileSegments = editingProfileSegments.filter((_, index) => index !== Number(button.dataset.removeSegment));
+          if (!editingProfileSegments.length) {
+            editingProfileSegments = [emptyProfileSegment()];
+          }
+          renderProfileSegmentsEditor();
+        });
+      });
+    }
+
+    function gatherProfilePayload() {
+      return {
+        name: document.getElementById("profileName").value.trim(),
+        cone: document.getElementById("profileCone").value.trim(),
+        description: document.getElementById("profileDescription").value.trim(),
+        segments: editingProfileSegments.map((segment) => ({
+          name: String(segment.name || "").trim(),
+          target_temp_c: Number(segment.target_temp_c),
+          ramp_rate_c_per_hour: Number(segment.ramp_rate_c_per_hour),
+          soak_minutes: Number(segment.soak_minutes || 0),
+        })),
+      };
+    }
+
+    function resetRuleForm() {
+      if (!ruleForm || !ruleSubmit || !ruleError) {
+        return;
+      }
+      editingRuleId = null;
+      ruleForm.reset();
+      document.getElementById("ruleType").value = "TARGET_REACHED";
+      document.getElementById("ruleSeverity").value = "WARNING";
+      document.getElementById("ruleEnabled").value = "true";
+      document.getElementById("ruleHysteresis").value = "5";
+      document.getElementById("ruleCooldown").value = "15";
+      document.getElementById("ruleColor").value = "#38bdf8";
+      document.getElementById("ruleNotifyEmail").value = "false";
+      document.getElementById("ruleNotifySms").value = "false";
+      document.getElementById("ruleNotifyPush").value = "false";
+      ruleSubmit.textContent = "Add Rule";
+      ruleError.textContent = "";
+      updateRuleUnitLabels();
+    }
+
+    function renderEventList(events) {
+      if (!eventList) {
+        currentEvents = events || [];
+        return;
+      }
+      currentEvents = events || [];
+      if (!currentEvents.length) {
+        eventList.innerHTML = '<div class="subtle">No event markers in this window yet.</div>';
+        return;
+      }
+
+      eventList.innerHTML = "";
+      currentEvents.forEach((event) => {
+        const row = document.createElement("div");
+        row.className = "ops-item";
+        const sampleContext = event.temp_f !== null && event.temp_f !== undefined
+          ? `${formatPrimaryTemperature(event.temp_f, event.temp_c)}${event.sample_status ? `, ${event.sample_status}` : ""}`
+          : (event.sample_status || "no sample context");
+        row.innerHTML = `
+          <div class="ops-item-top">
+            <div class="ops-item-label">${event.label}</div>
+            <div class="ops-item-time">${formatTimestamp(event.timestamp_utc)}</div>
+          </div>
+          <div class="ops-item-detail"><span class="event-badge">${event.event_type}</span> ${event.detail || ""}</div>
+          <div class="subtle">Captured at ${sampleContext}${event.sample_detail ? `, ${event.sample_detail}` : ""}</div>
+        `;
+        eventList.appendChild(row);
+      });
+    }
+
+    function renderDiagnostics(diagnostics) {
+      if (!diagnosticsGrid) {
+        return;
+      }
+      if (!diagnostics) {
+        diagnosticsGrid.innerHTML = '<div class="diagnostic-card"><div class="label">No data</div><div class="value">--</div></div>';
+        return;
+      }
+
+      const detailText = (diagnostics.top_fault_details || []).length
+        ? diagnostics.top_fault_details.map((item) => `${item.detail} (${item.count})`).join(", ")
+        : "none";
+      diagnosticsGrid.innerHTML = `
+        <div class="diagnostic-card">
+          <div class="label">Fault Samples</div>
+          <div class="value">${Number(diagnostics.fault_samples || 0).toLocaleString()}</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Fault Rate</div>
+          <div class="value">${Number(diagnostics.fault_rate_percent || 0).toFixed(1)}%</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Longest Streak</div>
+          <div class="value">${Number(diagnostics.longest_fault_streak || 0)} samples</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Current Streak</div>
+          <div class="value">${Number(diagnostics.current_fault_streak || 0)} samples</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Top Faults</div>
+          <div class="value">${detailText}</div>
+        </div>
+      `;
+    }
+
+    function hexToSoftRgba(hexColor, alpha) {
+      const hex = hexColor.replace("#", "");
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function applyAccentColor(hexColor) {
+      currentAccentColor = hexColor || "#38bdf8";
+      document.documentElement.style.setProperty("--accent-color", currentAccentColor);
+      document.documentElement.style.setProperty("--accent-soft", hexToSoftRgba(currentAccentColor, 0.22));
+    }
+
+    function applyTheme(theme) {
+      const resolvedTheme = {
+        accent: theme?.accent || "#38bdf8",
+        pageBg: theme?.pageBg || "#0b1220",
+        panelBg: theme?.panelBg || "#111827",
+      };
+      baseAccentColor = resolvedTheme.accent;
+      document.documentElement.style.setProperty("--page-bg", resolvedTheme.pageBg);
+      document.documentElement.style.setProperty("--page-bg-secondary", resolvedTheme.pageBg);
+      document.documentElement.style.setProperty("--panel-bg", resolvedTheme.panelBg);
+      document.documentElement.style.setProperty("--panel-border", hexToSoftRgba(resolvedTheme.accent, 0.22));
+      applyAccentColor(resolvedTheme.accent);
+      accentColorPicker.value = resolvedTheme.accent;
+      pageBgPicker.value = resolvedTheme.pageBg;
+      panelBgPicker.value = resolvedTheme.panelBg;
+    }
+
+    function loadTheme() {
+      applyTheme(null);
+    }
+
+    async function saveTheme() {
+      const theme = {
+        accent: accentColorPicker.value,
+        pageBg: pageBgPicker.value,
+        panelBg: panelBgPicker.value,
+      };
+      applyTheme(theme);
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme }),
+      });
+    }
+
+    async function saveDisplayUnit() {
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_unit: selectedUnit }),
+      });
+    }
+
+    function populateResolutionOptions() {
+      const options = HISTORY_BUCKET_PRESETS[selectedRange] || HISTORY_BUCKET_PRESETS["24h"];
+      const currentValue = selectedResolution;
+      resolutionSelect.innerHTML = '<option value="auto">Auto</option>';
+      options.forEach((seconds) => {
+        const option = document.createElement("option");
+        option.value = String(seconds);
+        option.textContent = seconds < 60
+          ? `${seconds}s`
+          : seconds < 3600
+            ? `${Math.round(seconds / 60)}m`
+            : `${Math.round(seconds / 3600)}h`;
+        resolutionSelect.appendChild(option);
+      });
+      if (currentValue === "auto" || options.includes(Number(currentValue))) {
+        resolutionSelect.value = currentValue;
+      } else {
+        selectedResolution = "auto";
+        resolutionSelect.value = "auto";
+      }
+    }
+
+    function defaultCardLayout() {
+      return {
+        "top-summary": ["latest-temp", "last-update", "sample-age", "total-rows"],
+        "below-chart": ["last-fault", "last-alert", "active-profile"],
+      };
+    }
+
+    function normalizeCardLayout(layout) {
+      const normalized = defaultCardLayout();
+      if (!layout || typeof layout !== "object" || Array.isArray(layout)) {
+        return normalized;
+      }
+
+      const topSummary = Array.isArray(layout["top-summary"]) ? layout["top-summary"] : [];
+      const belowChart = Array.isArray(layout["below-chart"]) ? layout["below-chart"] : [];
+      const legacySidebar = Array.isArray(layout["sidebar"]) ? layout["sidebar"] : [];
+
+      normalized["top-summary"] = [...topSummary];
+      normalized["below-chart"] = [...belowChart, ...legacySidebar];
+
+      const seen = new Set();
+      Object.keys(normalized).forEach((zoneId) => {
+        normalized[zoneId] = normalized[zoneId].filter((cardId) => {
+          if (seen.has(cardId)) {
+            return false;
+          }
+          seen.add(cardId);
+          return true;
+        });
+      });
+
+      return normalized;
+    }
+
+    function getAllCards() {
+      return Array.from(document.querySelectorAll(".card[data-card-id]"));
+    }
+
+    function applyCardLayout(layout) {
+      const normalizedLayout = normalizeCardLayout(layout);
+      const cards = getAllCards();
+      const cardById = new Map(cards.map((card) => [card.dataset.cardId, card]));
+      layoutZones.forEach((zone) => {
+        zone.innerHTML = "";
+      });
+      ["top-summary", "below-chart"].forEach((zoneId) => {
+        const zone = layoutZones.find((item) => item.dataset.zoneId === zoneId);
+        const cardIds = normalizedLayout[zoneId] || [];
+        cardIds.forEach((cardId) => {
+          const card = cardById.get(cardId);
+          if (card && zone) {
+            zone.appendChild(card);
+            cardById.delete(cardId);
+          }
+        });
+      });
+      cardById.forEach((card) => topSummaryZone.appendChild(card));
+    }
+
+    function currentCardLayout() {
+      const layout = {};
+      layoutZones.forEach((zone) => {
+        layout[zone.dataset.zoneId] = Array.from(zone.querySelectorAll(".card")).map((card) => card.dataset.cardId);
+      });
+      return layout;
+    }
+
+    async function saveCardOrder() {
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card_order: currentCardLayout() }),
+      });
+    }
+
+    function setLayoutEditEnabled(enabled) {
+      layoutEditEnabled = enabled;
+      layoutToggle.classList.toggle("active", enabled);
+      layoutToggle.textContent = enabled ? "Done Editing" : "Edit Layout";
+      getAllCards().forEach((card) => {
+        card.draggable = enabled;
+        card.classList.toggle("layout-edit", enabled);
+      });
+    }
+
+    function setupCardDragAndDrop() {
+      let draggedCard = null;
+      getAllCards().forEach((card) => {
+        card.addEventListener("dragstart", () => {
+          if (!layoutEditEnabled) {
+            return;
+          }
+          draggedCard = card;
+          card.classList.add("dragging");
+        });
+        card.addEventListener("dragend", () => {
+          card.classList.remove("dragging");
+          getAllCards().forEach((item) => item.classList.remove("drag-target"));
+          layoutZones.forEach((zone) => zone.classList.remove("drag-target-zone"));
+          if (draggedCard) {
+            void saveCardOrder();
+          }
+          draggedCard = null;
+        });
+        card.addEventListener("dragover", (event) => {
+          if (!layoutEditEnabled || !draggedCard || draggedCard === card) {
+            return;
+          }
+          event.preventDefault();
+          getAllCards().forEach((item) => item.classList.remove("drag-target"));
+          card.classList.add("drag-target");
+          const rect = card.getBoundingClientRect();
+          const before = event.clientY < rect.top + rect.height / 2;
+          if (before) {
+            card.parentElement.insertBefore(draggedCard, card);
+          } else {
+            card.parentElement.insertBefore(draggedCard, card.nextSibling);
+          }
+        });
+        card.addEventListener("dragleave", () => {
+          card.classList.remove("drag-target");
+        });
+      });
+
+      layoutZones.forEach((zone) => {
+        zone.addEventListener("dragover", (event) => {
+          if (!layoutEditEnabled || !draggedCard) {
+            return;
+          }
+          event.preventDefault();
+          zone.classList.add("drag-target-zone");
+          if (!zone.querySelector(".card")) {
+            zone.appendChild(draggedCard);
+          }
+        });
+        zone.addEventListener("dragleave", () => {
+          zone.classList.remove("drag-target-zone");
+        });
+        zone.addEventListener("drop", (event) => {
+          if (!layoutEditEnabled || !draggedCard) {
+            return;
+          }
+          event.preventDefault();
+          zone.classList.remove("drag-target-zone");
+          zone.appendChild(draggedCard);
+        });
+      });
+    }
+
+    async function postReset(path) {
+      const response = await fetch(path, { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.error || "Reset failed");
+      }
+      await refreshAll();
+    }
+
+    async function loadDashboardPreferences() {
+      const response = await fetch("/api/dashboard-preferences");
+      const payload = await response.json();
+      if (payload.theme) {
+        applyTheme(payload.theme);
+      } else {
+        applyTheme(null);
+      }
+      if (payload.display_unit && ["F", "C", "BOTH"].includes(payload.display_unit)) {
+        selectedUnit = payload.display_unit;
+      }
+      unitSelect.value = selectedUnit;
+      updateRuleUnitLabels();
+      if (payload.card_order && typeof payload.card_order === "object" && !Array.isArray(payload.card_order)) {
+        applyCardLayout(payload.card_order);
+      } else {
+        applyCardLayout(defaultCardLayout());
+      }
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * ratio);
+      canvas.height = Math.floor(rect.height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function drawRoundedRect(x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    function smoothPoints(points, windowSize) {
+      const smoothed = [];
+      const recentTemps = [];
+
+      points.forEach((point) => {
+        if (point.status !== "OK" || point.temp_f === null || !Number.isFinite(point.temp_f)) {
+          recentTemps.length = 0;
+          smoothed.push(point);
+          return;
+        }
+
+        recentTemps.push(point.temp_f);
+        if (recentTemps.length > windowSize) {
+          recentTemps.shift();
+        }
+
+        const averageF = recentTemps.reduce((sum, temp) => sum + temp, 0) / recentTemps.length;
+        smoothed.push({
+          ...point,
+          temp_f: averageF,
+          temp_c: (averageF - 32.0) * 5.0 / 9.0,
+        });
+      });
+
+      return smoothed;
+    }
+
+    function drawHoverOverlay() {
+      if (hoverX === null || !chartState.plotPoints.length) {
+        return;
+      }
+
+      let nearest = chartState.plotPoints[0];
+      let nearestDistance = Math.abs(nearest.x - hoverX);
+
+      chartState.plotPoints.forEach((point) => {
+        const distance = Math.abs(point.x - hoverX);
+        if (distance < nearestDistance) {
+          nearest = point;
+          nearestDistance = distance;
+        }
+      });
+
+      const matchingEvents = (chartState.events || []).filter((event) => {
+        const eventTime = new Date(event.timestamp_utc).getTime();
+        const pointTime = new Date(nearest.timestamp_utc).getTime();
+        return Math.abs(eventTime - pointTime) <= Math.max(30000, chartState.timeSpan * 0.01);
+      }).slice(0, 3);
+
+      const boxWidth = 320;
+      const boxHeight = 58 + (matchingEvents.length * 18);
+      const boxX = Math.min(
+        Math.max(12, nearest.x + 12),
+        canvas.getBoundingClientRect().width - boxWidth - 12,
+      );
+      const boxY = Math.max(12, nearest.y - boxHeight - 16);
+
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(nearest.x, chartState.top);
+      ctx.lineTo(nearest.x, chartState.top + chartState.plotHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = nearest.status === "OK" ? "#38bdf8" : "#ef4444";
+      ctx.beginPath();
+      ctx.arc(nearest.x, nearest.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.96)";
+      ctx.strokeStyle = "#64748b";
+      ctx.lineWidth = 1;
+      drawRoundedRect(boxX, boxY, boxWidth, boxHeight, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "700 14px system-ui, sans-serif";
+      const valueText = nearest.status === "OK"
+        ? formatPrimaryTemperature(nearest.temp_f, nearest.temp_c)
+        : `ERROR: ${nearest.detail || "fault"}`;
+      ctx.fillText(valueText, boxX + 12, boxY + 23);
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillText(formatTimestamp(nearest.timestamp_utc), boxX + 12, boxY + 42);
+
+      if (matchingEvents.length) {
+        ctx.fillStyle = "#facc15";
+        ctx.font = "700 12px system-ui, sans-serif";
+        ctx.fillText("Events", boxX + 12, boxY + 60);
+        ctx.fillStyle = "#fde68a";
+        ctx.font = "12px system-ui, sans-serif";
+        matchingEvents.forEach((event, index) => {
+          const label = event.detail ? `${event.label}: ${event.detail}` : event.label;
+          ctx.fillText(label.slice(0, 40), boxX + 12, boxY + 78 + (index * 18));
+        });
+      }
+    }
+
+    function drawChart(points, overlayPoints = [], events = []) {
+      const displayPoints = smoothingEnabled
+        ? smoothPoints(points, 12)
+        : points;
+
+      resizeCanvas();
+      const width = canvas.getBoundingClientRect().width;
+      const height = canvas.getBoundingClientRect().height;
+      ctx.clearRect(0, 0, width, height);
+
+      const left = 64;
+      const right = 16;
+      const top = 16;
+      const bottom = 36;
+      const plotWidth = Math.max(1, width - left - right);
+      const plotHeight = Math.max(1, height - top - bottom);
+
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, width, height);
+      ctx.strokeStyle = "#334155";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(left, top, plotWidth, plotHeight);
+
+      if (!displayPoints.length && !overlayPoints.length) {
+        ctx.fillStyle = "#9ca3af";
+        ctx.font = "14px system-ui, sans-serif";
+        ctx.fillText("No samples in this window yet.", left + 12, top + 28);
+        chartMeta.textContent = "No samples available.";
+        return;
+      }
+
+      const timeSourcePoints = displayPoints.length ? displayPoints : overlayPoints;
+      const times = timeSourcePoints.map((point) => new Date(point.timestamp_utc).getTime());
+      const validTemps = displayPoints
+        .map((point) => displayTempFromStoredF(point.temp_f))
+        .filter((temp) => temp !== null && Number.isFinite(temp));
+      const overlayTemps = overlayPoints
+        .map((point) => displayTempFromStoredF(point.temp_f))
+        .filter((temp) => temp !== null && Number.isFinite(temp));
+      const minTime = Math.min(...times);
+      const maxTime = Math.max(...times);
+      const combinedTemps = [...validTemps, ...overlayTemps];
+      const minTemp = combinedTemps.length ? Math.min(...combinedTemps) : 0;
+      const maxTemp = combinedTemps.length ? Math.max(...combinedTemps) : 1;
+      let paddedMinTemp = minTemp === maxTemp ? minTemp - 1 : minTemp - Math.max(1, (maxTemp - minTemp) * 0.08);
+      let paddedMaxTemp = minTemp === maxTemp ? maxTemp + 1 : maxTemp + Math.max(1, (maxTemp - minTemp) * 0.08);
+      if ((paddedMaxTemp - paddedMinTemp) < 20.0) {
+        const midpoint = (paddedMinTemp + paddedMaxTemp) / 2;
+        paddedMinTemp = midpoint - (20.0 / 2);
+        paddedMaxTemp = midpoint + (20.0 / 2);
+      }
+      const timeSpan = Math.max(1, maxTime - minTime);
+      const tempSpan = Math.max(1, paddedMaxTemp - paddedMinTemp);
+
+      chartState = {
+        points,
+        plotPoints: [],
+        overlayPoints,
+        events,
+        top,
+        plotHeight,
+        timeSpan,
+      };
+
+      function xFor(pointTime) {
+        return left + ((pointTime - minTime) / timeSpan) * plotWidth;
+      }
+
+      function yFor(displayTemp) {
+        return top + plotHeight - ((displayTemp - paddedMinTemp) / tempSpan) * plotHeight;
+      }
+
+      ctx.strokeStyle = "#1f2937";
+      ctx.fillStyle = "#9ca3af";
+      ctx.font = "12px system-ui, sans-serif";
+      for (let step = 0; step <= 4; step += 1) {
+        const y = top + (plotHeight * step) / 4;
+        const tempLabel = paddedMaxTemp - (tempSpan * step) / 4;
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(left + plotWidth, y);
+        ctx.stroke();
+        ctx.fillText(`${tempLabel.toFixed(0)} ${unitSuffix()}`, 8, y + 4);
+      }
+
+      let segmentOpen = false;
+      ctx.strokeStyle = currentAccentColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      displayPoints.forEach((point) => {
+        const pointTime = new Date(point.timestamp_utc).getTime();
+        const displayTemp = displayTempFromStoredF(point.temp_f);
+        if (displayTemp === null || !Number.isFinite(displayTemp) || point.status !== "OK") {
+          segmentOpen = false;
+          if (point.status === "ERROR") {
+            chartState.plotPoints.push({
+              ...point,
+              x: xFor(pointTime),
+              y: top + plotHeight - 5,
+            });
+          }
+          return;
+        }
+        const x = xFor(pointTime);
+        const y = yFor(displayTemp);
+        chartState.plotPoints.push({
+          ...point,
+          x,
+          y,
+        });
+        if (!segmentOpen) {
+          ctx.moveTo(x, y);
+          segmentOpen = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+
+      if (overlayPoints.length) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(248, 250, 252, 0.75)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        let overlayOpen = false;
+        overlayPoints.forEach((point) => {
+          const displayTemp = displayTempFromStoredF(point.temp_f);
+          if (displayTemp === null || !Number.isFinite(displayTemp)) {
+            overlayOpen = false;
+            return;
+          }
+          const x = xFor(new Date(point.timestamp_utc).getTime());
+          const y = yFor(displayTemp);
+          if (!overlayOpen) {
+            ctx.moveTo(x, y);
+            overlayOpen = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (events.length) {
+        ctx.save();
+        events.forEach((event) => {
+          const x = xFor(new Date(event.timestamp_utc).getTime());
+          ctx.strokeStyle = "rgba(250, 204, 21, 0.78)";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 6]);
+          ctx.beginPath();
+          ctx.moveTo(x, top);
+          ctx.lineTo(x, top + plotHeight);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#facc15";
+          ctx.beginPath();
+          ctx.arc(x, top + 10, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.restore();
+      }
+
+      displayPoints.forEach((point) => {
+        if (point.status !== "ERROR") {
+          return;
+        }
+        const x = xFor(new Date(point.timestamp_utc).getTime());
+        ctx.fillStyle = "#ef4444";
+        ctx.beginPath();
+        ctx.arc(x, top + plotHeight - 5, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.fillStyle = "#9ca3af";
+      ctx.fillText(formatTimestamp(timeSourcePoints[0].timestamp_utc), left, height - 12);
+      const endLabel = formatTimestamp(timeSourcePoints[timeSourcePoints.length - 1].timestamp_utc);
+      const endWidth = ctx.measureText(endLabel).width;
+      ctx.fillText(endLabel, left + plotWidth - endWidth, height - 12);
+
+      if (combinedTemps.length) {
+        const modeLabel = smoothingEnabled ? "smoothed" : "raw";
+        chartMeta.textContent = `${displayPoints.length} samples, ${minTemp.toFixed(1)} ${unitSuffix()} to ${maxTemp.toFixed(1)} ${unitSuffix()}, ${modeLabel}`;
+      } else {
+        chartMeta.textContent = `${displayPoints.length} samples, no valid temperatures in range`;
+      }
+
+      drawHoverOverlay();
+    }
+
+    async function refreshStatus() {
+      const response = await fetch("/api/status");
+      const payload = await response.json();
+
+      totalRows.textContent = payload.total_rows.toLocaleString();
+
+      if (!payload.latest_sample) {
+        banner.textContent = "No samples logged yet";
+        banner.className = "status-banner";
+        applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : baseAccentColor);
+        latestTemp.textContent = "--";
+        lastUpdate.textContent = "--";
+        sampleAge.textContent = "--";
+        lastFault.textContent = payload.latest_fault ? payload.latest_fault.detail : "none";
+        lastAlert.textContent = payload.latest_alert ? payload.latest_alert.detail : "none";
+        activeProfileCard.textContent = payload.active_profile_run ? payload.active_profile_run.name : "none";
+        return;
+      }
+
+      const latest = payload.latest_sample;
+      const isOk = latest.status === "OK";
+      applyAccentColor(payload.active_alert_rule ? payload.active_alert_rule.color_hex : baseAccentColor);
+      banner.textContent = isOk ? "Sensor OK" : `Sensor ERROR: ${latest.detail || "fault sample logged"}`;
+      banner.className = `status-banner ${isOk ? "status-ok" : "status-error"}`;
+      latestTemp.textContent = latest.temp_f === null ? "--" : formatPrimaryTemperature(latest.temp_f, latest.temp_c);
+      lastUpdate.textContent = formatTimestamp(latest.timestamp_utc);
+      sampleAge.textContent = latest.sample_age;
+      lastFault.textContent = payload.latest_fault
+        ? `${payload.latest_fault.sample_age} ago: ${payload.latest_fault.detail || "fault"}`
+        : "none";
+      lastAlert.textContent = payload.latest_alert
+        ? `${payload.latest_alert.level}: ${payload.latest_alert.rule_name || payload.latest_alert.kind.toLowerCase()}`
+        : "none";
+      activeProfileCard.textContent = payload.active_profile_run
+        ? `${payload.active_profile_run.name} (${payload.active_profile_run.phase})`
+        : "none";
+    }
+
+    function renderActiveProfileSummary(run) {
+      currentProfileRun = run || null;
+      if (!run) {
+        activeProfileName.textContent = "No active profile";
+        activeProfileSegment.textContent = "--";
+        activeProfileExpectedTemp.textContent = "--";
+        activeProfileElapsed.textContent = "--";
+        profileStopButton.disabled = true;
+        return;
+      }
+
+      activeProfileName.textContent = run.name || "Tracked Profile";
+      activeProfileSegment.textContent = `${run.segment_name || "--"} (${run.phase || "--"})`;
+      activeProfileExpectedTemp.textContent = formatPrimaryTemperature(run.expected_temp_f, run.expected_temp_c);
+      activeProfileElapsed.textContent = formatDuration(run.elapsed_seconds || 0);
+      profileStopButton.disabled = false;
+    }
+
+    async function refreshProfiles() {
+      const response = await fetch("/api/profiles");
+      const payload = await response.json();
+      currentProfiles = payload.profiles || [];
+      renderActiveProfileSummary(payload.active_run || null);
+
+      if (!currentProfiles.length) {
+        profilesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No firing profiles created yet.</td></tr>';
+        return;
+      }
+
+      profilesTableBody.innerHTML = "";
+      currentProfiles.forEach((profile) => {
+        const isActive = currentProfileRun && currentProfileRun.profile_id === profile.id;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${profile.name}<div class="subtle">${profile.description || "no description"}</div></td>
+          <td>${profile.cone || "--"}</td>
+          <td>${profile.segments.length}</td>
+          <td>${formatDuration(profile.total_duration_seconds || 0)}</td>
+          <td>
+            <div class="profile-list-actions">
+              <button type="button" data-profile-activate="${profile.id}">${isActive ? "Restart Tracking" : "Track"}</button>
+              <button type="button" data-profile-edit="${profile.id}">Edit</button>
+              <button type="button" data-profile-delete="${profile.id}">Delete</button>
+            </div>
+          </td>
+        `;
+        profilesTableBody.appendChild(row);
+      });
+
+      profilesTableBody.querySelectorAll("[data-profile-activate]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          profileStatusMessage.textContent = "Starting profile tracking...";
+          const response = await fetch(`/api/profiles/${button.dataset.profileActivate}/activate`, { method: "POST" });
+          const payload = await response.json();
+          if (!response.ok) {
+            profileStatusMessage.textContent = payload.error || "Failed to start profile tracking.";
+            return;
+          }
+          profileStatusMessage.textContent = payload.message || "Profile tracking started.";
+          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+        });
+      });
+
+      profilesTableBody.querySelectorAll("[data-profile-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const profile = currentProfiles.find((item) => item.id === Number(button.dataset.profileEdit));
+          if (!profile) {
+            return;
+          }
+          editingProfileId = profile.id;
+          document.getElementById("profileName").value = profile.name;
+          document.getElementById("profileCone").value = profile.cone || "";
+          document.getElementById("profileDescription").value = profile.description || "";
+          editingProfileSegments = (profile.segments || []).map((segment) => ({
+            name: segment.name,
+            target_temp_c: Number(segment.target_temp_c),
+            ramp_rate_c_per_hour: Number(segment.ramp_rate_c_per_hour),
+            soak_minutes: Number(segment.soak_minutes),
+          }));
+          profileSubmit.textContent = "Save Profile";
+          profileError.textContent = "";
+          renderProfileSegmentsEditor();
+        });
+      });
+
+      profilesTableBody.querySelectorAll("[data-profile-delete]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const response = await fetch(`/api/profiles/${button.dataset.profileDelete}/delete`, { method: "POST" });
+          const payload = await response.json();
+          if (!response.ok) {
+            profileStatusMessage.textContent = payload.error || "Failed to delete profile.";
+            return;
+          }
+          if (editingProfileId === Number(button.dataset.profileDelete)) {
+            resetProfileForm();
+          }
+          profileStatusMessage.textContent = "Profile deleted.";
+          await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+        });
+      });
+    }
+
+    function renderSnapshotPreview(imageEl, emptyEl, badgeEl, snapshot, fallbackText) {
+      if (!snapshot || !snapshot.url) {
+        imageEl.hidden = true;
+        imageEl.removeAttribute("src");
+        if (fallbackText) {
+          emptyEl.hidden = false;
+          emptyEl.textContent = fallbackText;
+        } else {
+          emptyEl.hidden = true;
+          emptyEl.textContent = "";
+        }
+        badgeEl.hidden = true;
+        return;
+      }
+
+      imageEl.src = snapshot.url;
+      imageEl.hidden = false;
+      emptyEl.hidden = true;
+      badgeEl.hidden = false;
+      badgeEl.textContent = formatCompactTimestamp(snapshot.captured_at);
+    }
+
+    function renderCameraArchive(snapshots) {
+      if (!snapshots.length) {
+        cameraArchiveList.innerHTML = '<div class="subtle">No archived snapshots yet.</div>';
+        return;
+      }
+
+      cameraArchiveList.innerHTML = "";
+      snapshots.forEach((snapshot) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `camera-link ${selectedCameraSnapshot?.filename === snapshot.filename ? "active" : ""}`;
+        button.innerHTML = `
+          <span class="camera-link-title">${formatTimestamp(snapshot.captured_at)}</span>
+          <span class="camera-link-meta">${snapshot.filename}</span>
+        `;
+        button.addEventListener("click", () => {
+          selectedCameraSnapshot = snapshot;
+          renderCameraStatus(currentCameraStatus);
+        });
+        cameraArchiveList.appendChild(button);
+      });
+    }
+
+    function renderCameraStatus(payload) {
+      currentCameraStatus = payload || {};
+      const snapshots = payload?.snapshots || [];
+      const latestSnapshot = payload?.latest_snapshot || null;
+      if (!selectedCameraSnapshot || !snapshots.some((snapshot) => snapshot.filename === selectedCameraSnapshot.filename)) {
+        selectedCameraSnapshot = snapshots[0] || latestSnapshot;
+      }
+
+      renderSnapshotPreview(
+        cameraLatestPreview,
+        cameraLatestEmptyState,
+        cameraLatestTimestampBadge,
+        latestSnapshot,
+        "",
+      );
+      renderSnapshotPreview(
+        cameraSelectedPreview,
+        cameraSelectedEmptyState,
+        cameraSelectedTimestampBadge,
+        selectedCameraSnapshot,
+        "",
+      );
+
+      cameraLatestCapturedAt.textContent = latestSnapshot ? formatTimestamp(latestSnapshot.captured_at) : "--";
+      renderCameraArchive(snapshots);
+    }
+
+    async function refreshCameraStatus() {
+      const response = await fetch("/api/camera/status");
+      const payload = await response.json();
+      renderCameraStatus(payload);
+    }
+
+    async function captureSnapshot() {
+      cameraStatusMessage.textContent = "Capturing snapshot...";
+      captureSnapshotButton.disabled = true;
+      try {
+        const response = await fetch("/api/camera/capture", { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok) {
+          cameraStatusMessage.textContent = payload.error || "Failed to capture snapshot.";
+          return;
+        }
+        cameraStatusMessage.textContent = payload.message || "Snapshot captured.";
+        renderCameraStatus(payload.camera || null);
+      } finally {
+        captureSnapshotButton.disabled = false;
+      }
+    }
+
+    async function refreshAlertRules() {
+      if (!rulesTableBody) {
+        return;
+      }
+      const response = await fetch("/api/alert-rules");
+      const payload = await response.json();
+      const rules = payload.rules || [];
+      currentRules = rules;
+
+      if (!rules.length) {
+        rulesTableBody.innerHTML = '<tr><td colspan="7" class="subtle">No alert rules configured yet.</td></tr>';
+        return;
+      }
+
+      rulesTableBody.innerHTML = "";
+      rules.forEach((rule) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "slack" : null].filter(Boolean).join(", ") || "none"}</div></td>
+          <td>${humanizeRuleType(rule.rule_type)}</td>
+          <td>${rule.rule_type === "TIME_ELAPSED" ? `${Number(rule.trigger_minutes || 0).toFixed(1)} min` : formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
+          <td>${rule.severity}</td>
+          <td>
+            <span class="pill ${rule.enabled ? "pill-on" : "pill-off"}">${rule.enabled ? "Enabled" : "Disabled"}</span>
+            ${rule.active ? '<span class="pill pill-active">Active</span>' : ""}
+          </td>
+          <td>${formatTimestamp(rule.last_triggered_at)}</td>
+          <td>
+            <button type="button" data-edit="${rule.id}">Edit</button>
+            <button type="button" data-clone="${rule.id}">Clone</button>
+            <button type="button" data-delete="${rule.id}">Delete</button>
+          </td>
+        `;
+        rulesTableBody.appendChild(row);
+      });
+
+      rulesTableBody.querySelectorAll("[data-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const rule = rules.find((item) => item.id === Number(button.dataset.edit));
+          if (!rule) {
+            return;
+          }
+          editingRuleId = rule.id;
+          document.getElementById("ruleName").value = rule.name;
+          document.getElementById("ruleType").value = rule.rule_type;
+          document.getElementById("ruleThreshold").value = rule.rule_type === "TIME_ELAPSED"
+            ? Number(rule.trigger_minutes || 0).toFixed(1)
+            : convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
+          document.getElementById("ruleSeverity").value = rule.severity;
+          document.getElementById("ruleHysteresis").value = rule.rule_type === "TIME_ELAPSED"
+            ? "0"
+            : convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+          document.getElementById("ruleCooldown").value = Number(rule.notify_cooldown_minutes ?? 15).toFixed(1);
+          document.getElementById("ruleEnabled").value = rule.enabled ? "true" : "false";
+          document.getElementById("ruleColor").value = rule.color_hex;
+          document.getElementById("ruleNotifyEmail").value = rule.notify_email ? "true" : "false";
+          document.getElementById("ruleNotifySms").value = rule.notify_sms ? "true" : "false";
+          document.getElementById("ruleNotifyPush").value = rule.notify_push ? "true" : "false";
+          ruleSubmit.textContent = "Save Rule";
+          ruleError.textContent = "";
+          updateRuleUnitLabels();
+        });
+      });
+
+      rulesTableBody.querySelectorAll("[data-clone]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const response = await fetch(`/api/alert-rules/${button.dataset.clone}/clone`, { method: "POST" });
+          const result = await response.json();
+          if (!response.ok) {
+            ruleError.textContent = result.error || "Failed to clone alert rule.";
+            return;
+          }
+          await refreshAlertRules();
+        });
+      });
+
+      rulesTableBody.querySelectorAll("[data-delete]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          await fetch(`/api/alert-rules/${button.dataset.delete}/delete`, { method: "POST" });
+          if (editingRuleId === Number(button.dataset.delete)) {
+            resetRuleForm();
+          }
+          await refreshAlertRules();
+        });
+      });
+    }
+
+    async function refreshAlertDeliveries() {
+      if (!deliveriesTableBody || !deliveriesSummary) {
+        return;
+      }
+      const response = await fetch("/api/alert-deliveries");
+      const payload = await response.json();
+      const deliveries = payload.deliveries || [];
+      currentDeliveries = deliveries;
+
+      deliveriesSummary.textContent = deliveries.length
+        ? `${deliveries.length} recent alert log entries. Use this tab to confirm alert sends are actually making it out.`
+        : "No alert log entries have been recorded yet.";
+
+      if (!deliveries.length) {
+        deliveriesTableBody.innerHTML = '<tr><td colspan="5" class="subtle">No alert log entries recorded yet.</td></tr>';
+        return;
+      }
+
+      deliveriesTableBody.innerHTML = "";
+      deliveries.forEach((delivery) => {
+        const row = document.createElement("tr");
+        const resultClass = delivery.success ? "pill pill-on" : "pill pill-active";
+        const resultLabel = delivery.success ? "Sent" : "Failed";
+        row.innerHTML = `
+          <td>${formatTimestamp(delivery.timestamp_utc)}<div class="subtle">${delivery.sample_age}</div></td>
+          <td>${delivery.rule_name || "unknown"}</td>
+          <td><div class="channel-badges"><span class="channel-badge">${delivery.channel}</span></div></td>
+          <td><span class="${resultClass}">${resultLabel}</span></td>
+          <td class="delivery-detail">${delivery.detail || "no detail"}</td>
+        `;
+        deliveriesTableBody.appendChild(row);
+      });
+    }
+
+    async function refreshAlertChannels() {
+      if (!channelHealth) {
+        return;
+      }
+      const response = await fetch("/api/alert-channels");
+      const payload = await response.json();
+      alertChannelStatus = payload.channels || {};
+      renderChannelHealth();
+    }
+
+    async function refreshAlertChannelSettings() {
+      if (!emailEnabled) {
+        return;
+      }
+      const response = await fetch("/api/alert-channel-settings");
+      const payload = await response.json();
+      populateChannelSettingsForm(payload.settings || {});
+    }
+
+    async function saveAlertChannelSettings() {
+      if (!channelSettingsStatus) {
+        return;
+      }
+      channelSettingsStatus.textContent = "Saving channel settings...";
+      const response = await fetch("/api/alert-channel-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: gatherChannelSettings() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        channelSettingsStatus.textContent = payload.error || "Failed to save channel settings.";
+        return;
+      }
+
+      populateChannelSettingsForm(payload.settings || {});
+      channelSettingsStatus.textContent = "Channel settings saved.";
+      await refreshAlertChannels();
+    }
+
+    async function refreshWatchdogSettings() {
+      if (!watchdogFaultStreakThreshold) {
+        return;
+      }
+      const response = await fetch("/api/watchdog-settings");
+      const payload = await response.json();
+      populateWatchdogSettingsForm(payload.settings || {});
+    }
+
+    async function saveWatchdogSettings() {
+      if (!watchdogSettingsStatus) {
+        return;
+      }
+      watchdogSettingsStatus.textContent = "Saving watchdog settings...";
+      const response = await fetch("/api/watchdog-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: gatherWatchdogSettings() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        watchdogSettingsStatus.textContent = payload.error || "Failed to save watchdog settings.";
+        return;
+      }
+
+      populateWatchdogSettingsForm(payload.settings || {});
+      watchdogSettingsStatus.textContent = "Watchdog settings saved.";
+    }
+
+    async function sendTestAlert(channels) {
+      if (!testAlertStatus) {
+        return;
+      }
+      testAlertStatus.textContent = "Sending test alert...";
+      const response = await fetch("/api/test-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channels }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        testAlertStatus.textContent = payload.error || "Failed to send test alert.";
+        return;
+      }
+
+      const sentCount = (payload.results || []).filter((result) => result.success).length;
+      const totalCount = (payload.results || []).length;
+      testAlertStatus.textContent = payload.message || `Sent ${sentCount} of ${totalCount} test alerts.`;
+      await refreshAlertDeliveries();
+    }
+
+    async function refreshHistory() {
+      const params = new URLSearchParams({ range: selectedRange, resolution: selectedResolution });
+      if (customHistoryActive && historyStart.value && historyEnd.value) {
+        params.set("start", new Date(historyStart.value).toISOString());
+        params.set("end", new Date(historyEnd.value).toISOString());
+      }
+      const response = await fetch(`/api/history?${params.toString()}`);
+      const payload = await response.json();
+      drawChart(payload.samples, payload.profile_overlay || [], payload.events || []);
+      renderEventList(payload.events || []);
+      renderDiagnostics(payload.diagnostics || null);
+      if (payload.meta) {
+        const resolutionLabel = payload.meta.bucket_seconds >= 3600
+          ? `${Math.round(payload.meta.bucket_seconds / 3600)}h`
+          : payload.meta.bucket_seconds >= 60
+            ? `${Math.round(payload.meta.bucket_seconds / 60)}m`
+            : `${payload.meta.bucket_seconds}s`;
+        const overlayLabel = (payload.profile_overlay || []).length ? ", profile overlay on" : "";
+        const customLabel = payload.meta.start_utc && payload.meta.end_utc
+          ? `, ${formatTimestamp(payload.meta.start_utc)} to ${formatTimestamp(payload.meta.end_utc)}`
+          : "";
+        chartMeta.textContent = `${payload.meta.returned_samples} plotted from ${payload.meta.raw_rows} raw rows at ${resolutionLabel} buckets${overlayLabel}${customLabel}`;
+      }
+    }
+
+    async function refreshAll() {
+      try {
+        const refreshTasks = [
+          refreshStatus(),
+          refreshHistory(),
+          refreshProfiles(),
+          refreshCameraStatus(),
+        ];
+        if (rulesTableBody) {
+          refreshTasks.push(refreshAlertRules());
+        }
+        if (deliveriesTableBody) {
+          refreshTasks.push(refreshAlertDeliveries());
+        }
+        if (channelHealth) {
+          refreshTasks.push(refreshAlertChannels());
+        }
+        await Promise.all(refreshTasks);
+      } catch (error) {
+        banner.textContent = `Dashboard refresh failed: ${error}`;
+        banner.className = "status-banner status-error";
+      }
+    }
+
+    document.querySelectorAll("button[data-range]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        selectedRange = button.dataset.range;
+        customHistoryActive = false;
+        historyStart.value = "";
+        historyEnd.value = "";
+        populateResolutionOptions();
+        document.querySelectorAll("button[data-range]").forEach((item) => {
+          item.classList.toggle("active", item === button);
+        });
+        await refreshHistory();
+      });
+    });
+
+    document.getElementById("smoothToggle").addEventListener("click", (event) => {
+      smoothingEnabled = !smoothingEnabled;
+      event.target.classList.toggle("active", smoothingEnabled);
+      event.target.textContent = smoothingEnabled ? "Smooth" : "Raw";
+      drawChart(chartState.points, chartState.overlayPoints || [], chartState.events || []);
+    });
+
+    resolutionSelect.addEventListener("change", async () => {
+      selectedResolution = resolutionSelect.value;
+      await refreshHistory();
+    });
+
+    applyHistoryFilterButton.addEventListener("click", async () => {
+      if (!historyStart.value || !historyEnd.value) {
+        chartMeta.textContent = "Set both start and end times to apply a custom history filter.";
+        return;
+      }
+      customHistoryActive = true;
+      await refreshHistory();
+    });
+
+    clearHistoryFilterButton.addEventListener("click", async () => {
+      customHistoryActive = false;
+      historyStart.value = "";
+      historyEnd.value = "";
+      await refreshHistory();
+    });
+
+    alertTabButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setActiveAlertTab(button.dataset.alertTab);
+      });
+    });
+
+    if (saveChannelSettingsButton && resetChannelSettingsButton && channelSettingsStatus) {
+      saveChannelSettingsButton.addEventListener("click", async () => {
+        await saveAlertChannelSettings();
+      });
+
+      resetChannelSettingsButton.addEventListener("click", async () => {
+        channelSettingsStatus.textContent = "Reloading saved settings...";
+        await refreshAlertChannelSettings();
+        channelSettingsStatus.textContent = "Saved settings reloaded.";
+      });
+    }
+
+    if (saveWatchdogSettingsButton && resetWatchdogSettingsButton && watchdogSettingsStatus) {
+      saveWatchdogSettingsButton.addEventListener("click", async () => {
+        await saveWatchdogSettings();
+      });
+
+      resetWatchdogSettingsButton.addEventListener("click", async () => {
+        watchdogSettingsStatus.textContent = "Reloading saved settings...";
+        await refreshWatchdogSettings();
+        watchdogSettingsStatus.textContent = "Saved settings reloaded.";
+      });
+    }
+
+    unitSelect.addEventListener("change", async () => {
+      selectedUnit = unitSelect.value;
+      updateRuleUnitLabels();
+      if (editingRuleId !== null) {
+        const rule = currentRules.find((item) => item.id === editingRuleId);
+        if (rule) {
+          if (rule.rule_type === "TIME_ELAPSED") {
+            document.getElementById("ruleThreshold").value = Number(rule.trigger_minutes || 0).toFixed(1);
+            document.getElementById("ruleHysteresis").value = "0";
+          } else {
+            document.getElementById("ruleThreshold").value = convertStoredFToRuleInput(rule.threshold_f).toFixed(1);
+            document.getElementById("ruleHysteresis").value = convertStoredFToRuleInput(rule.hysteresis_f).toFixed(1);
+          }
+        }
+      }
+      await saveDisplayUnit();
+      await refreshAll();
+    });
+
+    layoutToggle.addEventListener("click", () => {
+      if (!setupModal.hidden) {
+        setSetupModalOpen(false);
+      }
+      setLayoutEditEnabled(!layoutEditEnabled);
+    });
+
+    openSetupButton.addEventListener("click", () => {
+      setSetupModalOpen(true);
+    });
+
+    closeSetupButton.addEventListener("click", () => {
+      setSetupModalOpen(false);
+    });
+
+    setupModal.addEventListener("click", (event) => {
+      if (event.target === setupModal) {
+        setSetupModalOpen(false);
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !setupModal.hidden) {
+        setSetupModalOpen(false);
+      }
+    });
+
+    accentColorPicker.addEventListener("input", () => { void saveTheme(); });
+    pageBgPicker.addEventListener("input", () => { void saveTheme(); });
+    panelBgPicker.addEventListener("input", () => { void saveTheme(); });
+
+    document.getElementById("resetColorsButton").addEventListener("click", async () => {
+      applyTheme(null);
+      await fetch("/api/dashboard-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme: {
+            accent: "#38bdf8",
+            pageBg: "#0b1220",
+            panelBg: "#111827",
+          },
+        }),
+      });
+    });
+
+    document.getElementById("resetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
+    document.getElementById("resetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
+    document.getElementById("inlineResetFaultsButton").addEventListener("click", async () => postReset("/api/reset-faults"));
+    document.getElementById("inlineResetAlertsButton").addEventListener("click", async () => postReset("/api/reset-alerts"));
+
+    if (ruleForm && ruleCancel) {
+      ruleForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        ruleError.textContent = "";
+        const ruleType = document.getElementById("ruleType").value;
+        const payload = {
+          name: document.getElementById("ruleName").value.trim(),
+          rule_type: ruleType,
+          threshold_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleThreshold").value),
+          trigger_minutes: ruleType === "TIME_ELAPSED" ? Number(document.getElementById("ruleThreshold").value) : null,
+          severity: document.getElementById("ruleSeverity").value,
+          hysteresis_f: ruleType === "TIME_ELAPSED" ? 0 : convertRuleInputToStoredF(document.getElementById("ruleHysteresis").value),
+          notify_cooldown_minutes: Number(document.getElementById("ruleCooldown").value),
+          enabled: document.getElementById("ruleEnabled").value === "true",
+          color_hex: document.getElementById("ruleColor").value,
+          notify_email: document.getElementById("ruleNotifyEmail").value === "true",
+          notify_sms: document.getElementById("ruleNotifySms").value === "true",
+          notify_push: document.getElementById("ruleNotifyPush").value === "true",
+        };
+
+        const path = editingRuleId === null
+          ? "/api/alert-rules"
+          : `/api/alert-rules/${editingRuleId}`;
+
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          ruleError.textContent = result.error || "Failed to save alert rule.";
+          return;
+        }
+
+        resetRuleForm();
+        await refreshAlertRules();
+      });
+
+      ruleCancel.addEventListener("click", () => {
+        resetRuleForm();
+      });
+
+      document.getElementById("ruleType").addEventListener("change", () => {
+        updateRuleUnitLabels();
+      });
+    }
+
+    if (eventForm && eventStatus) {
+      eventForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        eventStatus.textContent = "Saving marker...";
+        const response = await fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event_type: document.getElementById("eventType").value,
+            label: document.getElementById("eventLabel").value.trim(),
+            detail: document.getElementById("eventDetail").value.trim(),
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          eventStatus.textContent = result.error || "Failed to add event marker.";
+          return;
+        }
+        eventForm.reset();
+        document.getElementById("eventType").value = "OPERATION";
+        eventStatus.textContent = "Event marker added.";
+        await refreshHistory();
+      });
+    }
+
+    profileForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      profileError.textContent = "";
+      const payload = gatherProfilePayload();
+      const path = editingProfileId === null
+        ? "/api/profiles"
+        : `/api/profiles/${editingProfileId}`;
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        profileError.textContent = result.error || "Failed to save profile.";
+        return;
+      }
+      profileStatusMessage.textContent = editingProfileId === null ? "Profile created." : "Profile updated.";
+      resetProfileForm();
+      await refreshProfiles();
+    });
+
+    profileCancel.addEventListener("click", () => {
+      resetProfileForm();
+    });
+
+    addSegmentButton.addEventListener("click", () => {
+      editingProfileSegments.push(emptyProfileSegment());
+      renderProfileSegmentsEditor();
+    });
+
+    profileStopButton.addEventListener("click", async () => {
+      const response = await fetch("/api/profiles/stop", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) {
+        profileStatusMessage.textContent = payload.error || "Failed to stop profile tracking.";
+        return;
+      }
+      profileStatusMessage.textContent = payload.message || "Profile tracking stopped.";
+      await Promise.all([refreshProfiles(), refreshStatus(), refreshHistory()]);
+    });
+
+    profileRefreshButton.addEventListener("click", async () => {
+      profileStatusMessage.textContent = "Reloading profiles...";
+      await refreshProfiles();
+      profileStatusMessage.textContent = "Profiles reloaded.";
+    });
+
+    captureSnapshotButton.addEventListener("click", async () => {
+      await captureSnapshot();
+    });
+
+    refreshSnapshotButton.addEventListener("click", async () => {
+      cameraStatusMessage.textContent = "Refreshing camera status...";
+      await refreshCameraStatus();
+      cameraStatusMessage.textContent = "Camera status refreshed.";
+    });
+
+    canvas.addEventListener("mousemove", (event) => {
+      hoverX = event.clientX - canvas.getBoundingClientRect().left;
+      drawChart(chartState.points, chartState.overlayPoints || [], chartState.events || []);
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      hoverX = null;
+      drawChart(chartState.points, chartState.overlayPoints || [], chartState.events || []);
+    });
+
+    setupCardDragAndDrop();
+    populateResolutionOptions();
+    window.addEventListener("resize", refreshHistory);
+    resetRuleForm();
+    resetProfileForm();
+    setActiveAlertTab("rules");
+    setSetupModalOpen(false);
+    setLayoutEditEnabled(false);
+    loadDashboardPreferences().then(async () => {
+      await refreshAlertChannelSettings();
+      await refreshWatchdogSettings();
+      await refreshAll();
+    });
+    setInterval(refreshAll, 5000);
+  </script>
+</body>
+</html>
