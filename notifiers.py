@@ -6,6 +6,7 @@ import logging
 import smtplib
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 from email.message import EmailMessage
 from typing import Protocol
 from urllib import error, parse, request
@@ -275,6 +276,18 @@ def _format_temperature_line(alert: AlertEvent) -> str:
     return f"{alert.temp_f:.2f} F / {alert.temp_c:.2f} C"
 
 
+def _format_local_timestamp(timestamp_utc: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(timestamp_utc.replace("Z", "+00:00"))
+    except ValueError:
+        return timestamp_utc
+    if parsed.tzinfo is None:
+        return timestamp_utc
+    local_time = parsed.astimezone()
+    timezone_label = local_time.tzname() or "local"
+    return f"{local_time.strftime('%Y-%m-%d %I:%M:%S %p')} {timezone_label}"
+
+
 def _build_slack_payload(alert: AlertEvent, rule: AlertRule) -> dict:
     summary = f"[{alert.level}] {rule.name}: {alert.detail}"
     fields = [
@@ -292,7 +305,7 @@ def _build_slack_payload(alert: AlertEvent, rule: AlertRule) -> dict:
         },
         {
             "type": "mrkdwn",
-            "text": f"*Time UTC*\n{alert.timestamp_utc}",
+            "text": f"*Time Local*\n{_format_local_timestamp(alert.timestamp_utc)}",
         },
         {
             "type": "mrkdwn",
