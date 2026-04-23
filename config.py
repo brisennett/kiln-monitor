@@ -81,8 +81,14 @@ ALERT_TWILIO_AUTH_TOKEN = os.getenv("KILN_MONITOR_TWILIO_AUTH_TOKEN", "")
 ALERT_TWILIO_FROM = os.getenv("KILN_MONITOR_TWILIO_FROM", "")
 ALERT_SMS_TO = os.getenv("KILN_MONITOR_ALERT_SMS_TO", "")
 
-ALERT_PUSH_ENABLED = os.getenv("KILN_MONITOR_ALERT_PUSH_ENABLED", "false").lower() == "true"
-ALERT_PUSH_WEBHOOK_URL = os.getenv("KILN_MONITOR_ALERT_PUSH_WEBHOOK_URL", "")
+ALERT_SLACK_ENABLED = os.getenv(
+    "KILN_MONITOR_ALERT_SLACK_ENABLED",
+    os.getenv("KILN_MONITOR_ALERT_PUSH_ENABLED", "false"),
+).lower() == "true"
+ALERT_SLACK_WEBHOOK_URL = os.getenv(
+    "KILN_MONITOR_ALERT_SLACK_WEBHOOK_URL",
+    os.getenv("KILN_MONITOR_ALERT_PUSH_WEBHOOK_URL", ""),
+)
 
 
 def load_watchdog_settings() -> dict:

@@ -285,7 +285,7 @@ Each rule can independently enable any combination of:
 
 - email
 - SMS
-- push webhook
+- Slack
 
 Channel delivery is controlled in two layers:
 
@@ -331,9 +331,11 @@ export KILN_MONITOR_TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export KILN_MONITOR_TWILIO_FROM=+18885551234
 export KILN_MONITOR_ALERT_SMS_TO=+15555551234
 
-export KILN_MONITOR_ALERT_PUSH_ENABLED=true
-export KILN_MONITOR_ALERT_PUSH_WEBHOOK_URL=https://your-push-endpoint.example.com/hook
+export KILN_MONITOR_ALERT_SLACK_ENABLED=true
+export KILN_MONITOR_ALERT_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/your/workspace/webhook
 ```
+
+Slack notifications use Slack incoming webhooks and send a rich message with alert level, rule, kind, timestamp, and temperature details. Legacy `KILN_MONITOR_ALERT_PUSH_*` environment variables are still accepted as a fallback for older installs.
 
 If a rule enables a channel but the global notifier is not configured, the alert remains in `alert_log` and the delivery failure is recorded in `alert_delivery_log`.
 

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import smtplib
 import sqlite3
 from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Protocol
 from urllib import error, parse, request
+from urllib.parse import urlparse
 
 from alerts import AlertEvent, AlertRule
 from config import (
@@ -19,8 +21,8 @@ from config import (
     ALERT_EMAIL_SMTP_STARTTLS,
     ALERT_EMAIL_SMTP_USERNAME,
     ALERT_EMAIL_TO,
-    ALERT_PUSH_ENABLED,
-    ALERT_PUSH_WEBHOOK_URL,
+    ALERT_SLACK_ENABLED,
+    ALERT_SLACK_WEBHOOK_URL,
     ALERT_SMS_ENABLED,
     ALERT_SMS_TO,
     ALERT_TWILIO_ACCOUNT_SID,
@@ -28,6 +30,8 @@ from config import (
     ALERT_TWILIO_FROM,
     DATABASE_PATH,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class NotificationError(Exception):
@@ -80,9 +84,9 @@ def default_alert_channel_settings() -> dict:
             "from_number": ALERT_TWILIO_FROM,
             "to_number": ALERT_SMS_TO,
         },
-        "push": {
-            "enabled": ALERT_PUSH_ENABLED,
-            "webhook_url": ALERT_PUSH_WEBHOOK_URL,
+        "slack": {
+            "enabled": ALERT_SLACK_ENABLED,
+            "webhook_url": ALERT_SLACK_WEBHOOK_URL,
         },
     }
 
@@ -115,8 +119,15 @@ def load_alert_channel_settings() -> dict:
         stored = json.loads(row["value"])
         if not isinstance(stored, dict):
             return settings
+        legacy_push = stored.pop("push", None)
+        if "slack" not in stored and isinstance(legacy_push, dict):
+            stored["slack"] = legacy_push
         return _merge_dict(settings, stored)
-    except (sqlite3.Error, json.JSONDecodeError):
+    except sqlite3.Error:
+        LOGGER.warning("failed to load alert channel settings from sqlite", exc_info=True)
+        return settings
+    except json.JSONDecodeError:
+        LOGGER.warning("failed to decode stored alert channel settings", exc_info=True)
         return settings
     finally:
         connection.close()
@@ -127,7 +138,7 @@ def build_enabled_notifiers() -> list[Notifier]:
     notifiers: list[Notifier] = [
         EmailNotifier(settings["email"]),
         TwilioSmsNotifier(settings["sms"]),
-        WebhookPushNotifier(settings["push"]),
+        SlackNotifier(settings["slack"]),
     ]
     return [notifier for notifier in notifiers if notifier.is_enabled()]
 
@@ -247,30 +258,105 @@ class TwilioSmsNotifier:
         return DeliveryResult(channel=self.channel_name, success=True, detail=f"sent to {self.settings['to_number']}")
 
 
-class WebhookPushNotifier:
+def _is_valid_slack_webhook_url(value: str) -> bool:
+    if not value:
+        return False
+    parsed = urlparse(value)
+    if parsed.scheme != "https":
+        return False
+    if parsed.netloc not in {"hooks.slack.com", "hooks.slack-gov.com"}:
+        return False
+    return parsed.path.startswith("/services/")
+
+
+def _format_temperature_line(alert: AlertEvent) -> str:
+    if alert.temp_f is None or alert.temp_c is None:
+        return "unavailable"
+    return f"{alert.temp_f:.2f} F / {alert.temp_c:.2f} C"
+
+
+def _build_slack_payload(alert: AlertEvent, rule: AlertRule) -> dict:
+    summary = f"[{alert.level}] {rule.name}: {alert.detail}"
+    fields = [
+        {
+            "type": "mrkdwn",
+            "text": f"*Level*\n{alert.level}",
+        },
+        {
+            "type": "mrkdwn",
+            "text": f"*Rule*\n{rule.name}",
+        },
+        {
+            "type": "mrkdwn",
+            "text": f"*Kind*\n{alert.kind}",
+        },
+        {
+            "type": "mrkdwn",
+            "text": f"*Time UTC*\n{alert.timestamp_utc}",
+        },
+        {
+            "type": "mrkdwn",
+            "text": f"*Temperature*\n{_format_temperature_line(alert)}",
+        },
+    ]
+    if alert.snapshot_filename:
+        fields.append(
+            {
+                "type": "mrkdwn",
+                "text": f"*Snapshot*\n{alert.snapshot_filename}",
+            }
+        )
+
+    return {
+        "text": summary,
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"Kiln alert: {rule.name}",
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{alert.level}* alert for `{alert.kind}`",
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": alert.detail,
+                },
+            },
+            {
+                "type": "section",
+                "fields": fields,
+            },
+        ],
+    }
+
+
+class SlackNotifier:
     channel_name = "PUSH"
 
     def __init__(self, settings: dict | None = None) -> None:
-        self.settings = settings or load_alert_channel_settings()["push"]
+        self.settings = settings or load_alert_channel_settings()["slack"]
 
     def is_enabled(self) -> bool:
-        return bool(self.settings.get("enabled")) and bool(self.settings.get("webhook_url"))
+        return bool(self.settings.get("enabled")) and _is_valid_slack_webhook_url(
+            str(self.settings.get("webhook_url", "")).strip()
+        )
 
     def send(self, alert: AlertEvent, rule: AlertRule) -> DeliveryResult:
         if not self.is_enabled():
-            raise NotificationError("push notifier is not configured")
+            raise NotificationError(
+                "slack notifier is not configured with a valid incoming webhook URL"
+            )
 
-        payload = json.dumps(
-            {
-                "level": alert.level,
-                "rule_name": rule.name,
-                "kind": alert.kind,
-                "timestamp_utc": alert.timestamp_utc,
-                "detail": alert.detail,
-                "temp_c": alert.temp_c,
-                "temp_f": alert.temp_f,
-            }
-        ).encode("utf-8")
+        payload = json.dumps(_build_slack_payload(alert, rule)).encode("utf-8")
         request_obj = request.Request(
             self.settings["webhook_url"],
             data=payload,
@@ -281,11 +367,15 @@ class WebhookPushNotifier:
         try:
             with request.urlopen(request_obj, timeout=10) as response:
                 if response.status >= 300:
-                    raise NotificationError(f"push webhook returned HTTP {response.status}")
+                    raise NotificationError(f"slack webhook returned HTTP {response.status}")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise NotificationError(f"push webhook failed: HTTP {exc.code} {detail}") from exc
+            raise NotificationError(f"slack webhook failed: HTTP {exc.code} {detail}") from exc
         except Exception as exc:
-            raise NotificationError(f"push webhook failed: {exc}") from exc
+            raise NotificationError(f"slack webhook failed: {exc}") from exc
 
-        return DeliveryResult(channel=self.channel_name, success=True, detail="push webhook accepted")
+        return DeliveryResult(
+            channel=self.channel_name,
+            success=True,
+            detail="slack webhook accepted",
+        )

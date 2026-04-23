@@ -1244,7 +1244,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       const channelLabels = {
         EMAIL: "Email",
         SMS: "SMS",
-        PUSH: "Push",
+        PUSH: "Slack",
       };
       channelHealth.innerHTML = "";
       ["EMAIL", "SMS", "PUSH"].forEach((channel) => {
@@ -1274,7 +1274,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       alertChannelSettings = settings || {};
       const email = alertChannelSettings.email || {};
       const sms = alertChannelSettings.sms || {};
-      const push = alertChannelSettings.push || {};
+      const slack = alertChannelSettings.slack || alertChannelSettings.push || {};
 
       emailEnabled.value = String(Boolean(email.enabled));
       emailSmtpHost.value = email.smtp_host || "";
@@ -1291,8 +1291,8 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       smsFromNumber.value = sms.from_number || "";
       smsToNumber.value = sms.to_number || "";
 
-      pushEnabled.value = String(Boolean(push.enabled));
-      pushWebhookUrl.value = push.webhook_url || "";
+      pushEnabled.value = String(Boolean(slack.enabled));
+      pushWebhookUrl.value = slack.webhook_url || "";
     }
 
     function gatherChannelSettings() {
@@ -1314,7 +1314,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
           from_number: smsFromNumber.value.trim(),
           to_number: smsToNumber.value.trim(),
         },
-        push: {
+        slack: {
           enabled: pushEnabled.value === "true",
           webhook_url: pushWebhookUrl.value.trim(),
         },
@@ -2455,7 +2455,7 @@ DASHBOARD_PAGE_HTML = """<!doctype html>
       rules.forEach((rule) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDeltaFromStoredF(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "slack" : null].filter(Boolean).join(", ") || "none"}</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
           <td>${rule.rule_type === "TIME_ELAPSED" ? `${Number(rule.trigger_minutes || 0).toFixed(1)} min` : formatRuleTemperatureFromStoredF(rule.threshold_f)}</td>
           <td>${rule.severity}</td>
@@ -3438,7 +3438,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
                 </select>
               </div>
               <div>
-                <label for="ruleNotifyPush">Push</label>
+                <label for="ruleNotifyPush">Slack</label>
                 <select id="ruleNotifyPush" name="notify_push">
                   <option value="false" selected>Off</option>
                   <option value="true">On</option>
@@ -3564,8 +3564,8 @@ ALERTS_PAGE_HTML = """<!doctype html>
             </section>
 
             <section class="channel-section">
-              <div class="channel-section-title">Push</div>
-              <div class="subtle">Generic webhook endpoint for push integrations.</div>
+              <div class="channel-section-title">Slack</div>
+              <div class="subtle">Slack incoming webhook for rich kiln alert messages.</div>
               <div class="channel-grid">
                 <div>
                   <label for="pushEnabled">Enabled</label>
@@ -3575,8 +3575,8 @@ ALERTS_PAGE_HTML = """<!doctype html>
                   </select>
                 </div>
                 <div>
-                  <label for="pushWebhookUrl">Webhook URL</label>
-                  <input id="pushWebhookUrl" type="text" placeholder="https://example.com/hook" />
+                  <label for="pushWebhookUrl">Incoming Webhook URL</label>
+                  <input id="pushWebhookUrl" type="text" placeholder="https://hooks.slack.com/services/..." />
                 </div>
               </div>
             </section>
@@ -3803,7 +3803,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
       const channelLabels = {
         EMAIL: "Email",
         SMS: "SMS",
-        PUSH: "Push",
+        PUSH: "Slack",
       };
       channelHealth.innerHTML = "";
       ["EMAIL", "SMS", "PUSH"].forEach((channel) => {
@@ -3833,7 +3833,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
       alertChannelSettings = settings || {};
       const email = alertChannelSettings.email || {};
       const sms = alertChannelSettings.sms || {};
-      const push = alertChannelSettings.push || {};
+      const slack = alertChannelSettings.slack || alertChannelSettings.push || {};
 
       emailEnabled.value = String(Boolean(email.enabled));
       emailSmtpHost.value = email.smtp_host || "";
@@ -3850,8 +3850,8 @@ ALERTS_PAGE_HTML = """<!doctype html>
       smsFromNumber.value = sms.from_number || "";
       smsToNumber.value = sms.to_number || "";
 
-      pushEnabled.value = String(Boolean(push.enabled));
-      pushWebhookUrl.value = push.webhook_url || "";
+      pushEnabled.value = String(Boolean(slack.enabled));
+      pushWebhookUrl.value = slack.webhook_url || "";
     }
 
     function gatherChannelSettings() {
@@ -3873,7 +3873,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
           from_number: smsFromNumber.value.trim(),
           to_number: smsToNumber.value.trim(),
         },
-        push: {
+        slack: {
           enabled: pushEnabled.value === "true",
           webhook_url: pushWebhookUrl.value.trim(),
         },
@@ -3916,7 +3916,7 @@ ALERTS_PAGE_HTML = """<!doctype html>
       rules.forEach((rule) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDelta(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "push" : null].filter(Boolean).join(", ") || "none"}</div></td>
+          <td><span class="color-swatch" style="background:${rule.color_hex};"></span>${rule.name}<div class="subtle">reset gap ${formatRuleDelta(rule.hysteresis_f)}</div><div class="subtle">cooldown ${Number(rule.notify_cooldown_minutes ?? 15).toFixed(1)} min</div><div class="subtle">channels: ${[rule.notify_email ? "email" : null, rule.notify_sms ? "sms" : null, rule.notify_push ? "slack" : null].filter(Boolean).join(", ") || "none"}</div></td>
           <td>${humanizeRuleType(rule.rule_type)}</td>
           <td>${rule.rule_type === "TIME_ELAPSED" ? `${Number(rule.trigger_minutes || 0).toFixed(1)} min` : formatRuleTemperature(rule.threshold_f)}</td>
           <td>${rule.severity}</td>
@@ -6639,9 +6639,9 @@ def update_alert_channel_settings(payload: dict) -> dict:
 
     normalized_email = settings.get("email", {})
     normalized_sms = settings.get("sms", {})
-    normalized_push = settings.get("push", {})
-    if not isinstance(normalized_email, dict) or not isinstance(normalized_sms, dict) or not isinstance(normalized_push, dict):
-        raise ValueError("email, sms, and push settings must be objects")
+    normalized_slack = settings.get("slack", settings.get("push", {}))
+    if not isinstance(normalized_email, dict) or not isinstance(normalized_sms, dict) or not isinstance(normalized_slack, dict):
+        raise ValueError("email, sms, and slack settings must be objects")
 
     merged = {
         "email": {
@@ -6661,9 +6661,9 @@ def update_alert_channel_settings(payload: dict) -> dict:
             "from_number": str(normalized_sms.get("from_number", base["sms"]["from_number"])).strip(),
             "to_number": str(normalized_sms.get("to_number", base["sms"]["to_number"])).strip(),
         },
-        "push": {
-            "enabled": bool(normalized_push.get("enabled", base["push"]["enabled"])),
-            "webhook_url": str(normalized_push.get("webhook_url", base["push"]["webhook_url"])).strip(),
+        "slack": {
+            "enabled": bool(normalized_slack.get("enabled", base["slack"]["enabled"])),
+            "webhook_url": str(normalized_slack.get("webhook_url", base["slack"]["webhook_url"])).strip(),
         },
     }
 
