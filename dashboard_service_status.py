@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dashboard_service_core import *
+from dashboard_service_profiles import fetch_active_profile_run
 
 def fetch_dashboard_status() -> dict:
     connection = open_readonly_connection()
@@ -312,4 +313,3 @@ def fetch_alert_channel_status() -> dict:
             "PUSH": bool(configured_channels.get("PUSH")),
         }
     }
-
