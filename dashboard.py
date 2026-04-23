@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -31,6 +32,7 @@ from storage.sqlite_logger import SQLiteLogger
 
 HOST = "0.0.0.0"
 PORT = 8080
+FIRING_LOG_PHOTOS_DIR = DATABASE_PATH.parent / "firing_log_photos"
 HISTORY_WINDOWS = {
     "1h": timedelta(hours=1),
     "24h": timedelta(hours=24),
@@ -5231,6 +5233,23 @@ FIRING_LOGS_PAGE_HTML = """<!doctype html>
           </div>
           <div id="firingLogStatus" class="status-text"></div>
         </form>
+        <div style="margin-top: 18px; border-top: 1px solid rgba(148, 163, 184, 0.14); padding-top: 16px;">
+          <div class="label">Add Result Photo</div>
+          <div class="subtle">Use this for finished work, cone packs, glaze results, or anything captured after the firing window.</div>
+          <div class="form-grid" style="margin-top: 12px;">
+            <div>
+              <label for="resultPhotoCaption">Caption</label>
+              <input id="resultPhotoCaption" placeholder="Cone pack after cooldown" />
+            </div>
+            <div>
+              <label for="resultPhotoFile">Choose Photo</label>
+              <input id="resultPhotoFile" type="file" accept="image/jpeg,image/png,image/webp" />
+            </div>
+          </div>
+          <div class="button-row" style="margin-top: 12px;">
+            <button type="button" id="uploadResultPhotoButton">Upload Result Photo</button>
+          </div>
+        </div>
       </section>
 
       <section class="card">
@@ -5275,6 +5294,8 @@ FIRING_LOGS_PAGE_HTML = """<!doctype html>
     const linkedEventsList = document.getElementById("linkedEventsList");
     const linkedPhotosList = document.getElementById("linkedPhotosList");
     const exportMarkdownLink = document.getElementById("exportMarkdownLink");
+    const resultPhotoCaption = document.getElementById("resultPhotoCaption");
+    const resultPhotoFile = document.getElementById("resultPhotoFile");
     let selectedLogId = null;
 
     function formatTimestamp(isoText) {
@@ -5386,8 +5407,9 @@ FIRING_LOGS_PAGE_HTML = """<!doctype html>
       photos.forEach((photo) => {
         const item = document.createElement("div");
         item.className = "mini-item";
+        const sourceLabel = photo.source_type === "RESULT" ? "Result photo" : "Kiln snapshot";
         item.innerHTML = `
-          <div><a class="snapshot-link" href="/camera/archive/${encodeURIComponent(photo.filename)}" target="_blank" rel="noopener noreferrer">${photo.filename}</a></div>
+          <div><span class="pill">${sourceLabel}</span> <a class="snapshot-link" href="${photo.url}" target="_blank" rel="noopener noreferrer">${photo.original_filename || photo.filename}</a></div>
           <div class="subtle">${formatTimestamp(photo.captured_at_utc)}</div>
           <div>${photo.caption || ""}</div>
         `;
@@ -5492,6 +5514,50 @@ FIRING_LOGS_PAGE_HTML = """<!doctype html>
         return;
       }
       firingLogStatus.textContent = "Linked events and photos refreshed.";
+      await loadLog(selectedLogId);
+      await refreshLogs();
+    });
+
+    document.getElementById("uploadResultPhotoButton").addEventListener("click", async () => {
+      if (!selectedLogId) {
+        firingLogStatus.textContent = "Save the firing log first so result photos have a log to attach to.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      const file = resultPhotoFile.files && resultPhotoFile.files[0];
+      if (!file) {
+        firingLogStatus.textContent = "Choose a photo to upload.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      firingLogStatus.textContent = "Uploading result photo...";
+      firingLogStatus.classList.remove("error-text");
+      const fileBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(fileBuffer);
+      let binary = "";
+      bytes.forEach((value) => {
+        binary += String.fromCharCode(value);
+      });
+      const contentBase64 = btoa(binary);
+      const response = await fetch(`/api/firing-logs/${selectedLogId}/photos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          mime_type: file.type,
+          caption: resultPhotoCaption.value.trim(),
+          content_base64: contentBase64,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        firingLogStatus.textContent = payload.error || "Unable to upload result photo.";
+        firingLogStatus.classList.add("error-text");
+        return;
+      }
+      resultPhotoCaption.value = "";
+      resultPhotoFile.value = "";
+      firingLogStatus.textContent = "Result photo uploaded.";
       await loadLog(selectedLogId);
       await refreshLogs();
     });
@@ -6164,6 +6230,13 @@ def parse_snapshot_captured_at(snapshot: dict) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def sanitize_uploaded_photo_name(filename: str) -> str:
+    base_name = Path(filename or "photo").name
+    sanitized = "".join(character if character.isalnum() or character in {"-", "_", "."} else "_" for character in base_name)
+    sanitized = sanitized.strip("._") or "photo"
+    return sanitized
+
+
 def table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
     row = connection.execute(
         """
@@ -6338,11 +6411,17 @@ def open_readwrite_connection() -> sqlite3.Connection:
             firing_log_id INTEGER NOT NULL,
             filename TEXT NOT NULL,
             captured_at_utc TEXT,
+            source_type TEXT NOT NULL DEFAULT 'AUTO',
+            original_filename TEXT,
             caption TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL
         )
         """
     )
+    if not table_has_column(connection, "firing_log_snapshots", "source_type"):
+        connection.execute("ALTER TABLE firing_log_snapshots ADD COLUMN source_type TEXT NOT NULL DEFAULT 'AUTO'")
+    if not table_has_column(connection, "firing_log_snapshots", "original_filename"):
+        connection.execute("ALTER TABLE firing_log_snapshots ADD COLUMN original_filename TEXT")
     connection.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_firing_logs_started_at_utc
@@ -7595,7 +7674,10 @@ def sync_firing_log_related_data(
     now = datetime.now(timezone.utc).isoformat()
 
     connection.execute("DELETE FROM firing_log_events WHERE firing_log_id = ?", (firing_log_id,))
-    connection.execute("DELETE FROM firing_log_snapshots WHERE firing_log_id = ?", (firing_log_id,))
+    connection.execute(
+        "DELETE FROM firing_log_snapshots WHERE firing_log_id = ? AND source_type = 'AUTO'",
+        (firing_log_id,),
+    )
 
     if table_exists(connection, "kiln_events"):
         select_fields = "id, timestamp_utc, event_type, label, detail"
@@ -7661,14 +7743,17 @@ def sync_firing_log_related_data(
                 firing_log_id,
                 filename,
                 captured_at_utc,
+                source_type,
+                original_filename,
                 caption,
                 created_at
-            ) VALUES (?, ?, ?, '', ?)
+            ) VALUES (?, ?, ?, 'AUTO', ?, '', ?)
             """,
             (
                 firing_log_id,
                 snapshot["filename"],
                 captured_iso,
+                snapshot["filename"],
                 now,
             ),
         )
@@ -7785,7 +7870,7 @@ def fetch_firing_log_detail(firing_log_id: int) -> dict:
         ).fetchall()
         snapshot_rows = connection.execute(
             """
-            SELECT id, filename, captured_at_utc, caption
+            SELECT id, filename, captured_at_utc, source_type, original_filename, caption
             FROM firing_log_snapshots
             WHERE firing_log_id = ?
             ORDER BY captured_at_utc ASC, id ASC
@@ -7832,8 +7917,14 @@ def fetch_firing_log_detail(firing_log_id: int) -> dict:
                 "id": snapshot_row["id"],
                 "filename": snapshot_row["filename"],
                 "captured_at_utc": snapshot_row["captured_at_utc"],
+                "source_type": snapshot_row["source_type"] if "source_type" in snapshot_row.keys() else "AUTO",
+                "original_filename": snapshot_row["original_filename"] if "original_filename" in snapshot_row.keys() else None,
                 "caption": snapshot_row["caption"],
-                "url": f"/camera/archive/{snapshot_row['filename']}",
+                "url": (
+                    f"/firing-log-photos/{snapshot_row['filename']}"
+                    if (snapshot_row["source_type"] if "source_type" in snapshot_row.keys() else "AUTO") == "RESULT"
+                    else f"/camera/archive/{snapshot_row['filename']}"
+                ),
             }
             for snapshot_row in snapshot_rows
         ],
@@ -7957,6 +8048,79 @@ def refresh_firing_log_related_data(firing_log_id: int) -> dict:
     return {"ok": True, "id": firing_log_id}
 
 
+def upload_firing_log_photo(firing_log_id: int, payload: dict) -> dict:
+    content_base64 = str(payload.get("content_base64", "")).strip()
+    original_filename = sanitize_uploaded_photo_name(str(payload.get("filename", "")).strip())
+    caption = str(payload.get("caption", "")).strip()
+    if not content_base64:
+        raise ValueError("photo content is required")
+    if not original_filename:
+        raise ValueError("photo filename is required")
+
+    try:
+        image_bytes = base64.b64decode(content_base64, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ValueError("photo upload was not valid base64") from exc
+
+    if not image_bytes:
+        raise ValueError("photo upload was empty")
+
+    lowered_name = original_filename.lower()
+    extension = Path(lowered_name).suffix
+    if extension not in {".jpg", ".jpeg", ".png", ".webp"}:
+        raise ValueError("photo must be .jpg, .jpeg, .png, or .webp")
+
+    mime_type = str(payload.get("mime_type", "")).strip().lower()
+    if mime_type and mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise ValueError("unsupported image mime type")
+
+    FIRING_LOG_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp_text = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stored_filename = f"log-{firing_log_id}-{timestamp_text}-{original_filename}"
+    photo_path = FIRING_LOG_PHOTOS_DIR / stored_filename
+    photo_path.write_bytes(image_bytes)
+
+    now = datetime.now(timezone.utc).isoformat()
+    connection = open_readwrite_connection()
+    try:
+        row = connection.execute(
+            "SELECT id FROM firing_logs WHERE id = ?",
+            (firing_log_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("firing log not found")
+        connection.execute(
+            """
+            INSERT INTO firing_log_snapshots (
+                firing_log_id,
+                filename,
+                captured_at_utc,
+                source_type,
+                original_filename,
+                caption,
+                created_at
+            ) VALUES (?, ?, ?, 'RESULT', ?, ?, ?)
+            """,
+            (
+                firing_log_id,
+                stored_filename,
+                now,
+                original_filename,
+                caption,
+                now,
+            ),
+        )
+        connection.execute(
+            "UPDATE firing_logs SET updated_at = ? WHERE id = ?",
+            (now, firing_log_id),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    return {"ok": True, "filename": stored_filename}
+
+
 def build_firing_log_markdown(firing_log_id: int) -> str:
     detail = fetch_firing_log_detail(firing_log_id)
     log = detail["log"]
@@ -8003,7 +8167,14 @@ def build_firing_log_markdown(firing_log_id: int) -> str:
     lines.extend(["", "## Photos", ""])
     if snapshots:
         for snapshot in snapshots:
-            lines.append(f"- {snapshot['captured_at_utc'] or 'unknown time'}: {snapshot['filename']}")
+            source_label = "Result photo" if snapshot.get("source_type") == "RESULT" else "Kiln snapshot"
+            caption_text = f" - {snapshot['caption']}" if snapshot.get("caption") else ""
+            url_text = snapshot.get("url") or ""
+            lines.append(
+                f"- {source_label} @ {snapshot['captured_at_utc'] or 'unknown time'}: "
+                f"{snapshot.get('original_filename') or snapshot['filename']}{caption_text}"
+                f"{f' ({url_text})' if url_text else ''}"
+            )
     else:
         lines.append("- None recorded.")
     lines.append("")
@@ -8668,6 +8839,33 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(image_bytes)
             return
 
+        if parsed_path.path.startswith("/firing-log-photos/"):
+            filename = unquote(parsed_path.path.removeprefix("/firing-log-photos/"))
+            if not filename or Path(filename).name != filename:
+                self.send_error(400, "Invalid firing log photo filename")
+                return
+            photo_path = FIRING_LOG_PHOTOS_DIR / filename
+            if not photo_path.exists():
+                self.send_error(404, "Firing log photo not found")
+                return
+            try:
+                image_bytes = photo_path.read_bytes()
+            except OSError:
+                self.send_error(500, "Unable to read firing log photo")
+                return
+            mime_type = "image/jpeg"
+            if photo_path.suffix.lower() == ".png":
+                mime_type = "image/png"
+            elif photo_path.suffix.lower() == ".webp":
+                mime_type = "image/webp"
+            self.send_response(200)
+            self.send_header("Content-Type", mime_type)
+            self.send_header("Content-Length", str(len(image_bytes)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(image_bytes)
+            return
+
         if parsed_path.path == "/api/status":
             self.send_json_response(fetch_dashboard_status())
             return
@@ -8874,6 +9072,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             if parsed_path.path.startswith("/api/firing-logs/") and parsed_path.path.endswith("/refresh"):
                 firing_log_id = int(parsed_path.path.split("/")[3])
                 self.send_json_response(refresh_firing_log_related_data(firing_log_id))
+                return
+
+            if parsed_path.path.startswith("/api/firing-logs/") and parsed_path.path.endswith("/photos"):
+                firing_log_id = int(parsed_path.path.split("/")[3])
+                self.send_json_response(upload_firing_log_photo(firing_log_id, payload))
                 return
 
             if parsed_path.path.startswith("/api/alert-rules/"):
