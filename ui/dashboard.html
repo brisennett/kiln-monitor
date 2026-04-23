@@ -2438,7 +2438,12 @@
 
       rulesTableBody.querySelectorAll("[data-delete]").forEach((button) => {
         button.addEventListener("click", async () => {
-          await fetch(`/api/alert-rules/${button.dataset.delete}/delete`, { method: "POST" });
+          const response = await fetch(`/api/alert-rules/${button.dataset.delete}/delete`, { method: "POST" });
+          const result = await response.json();
+          if (!response.ok) {
+            ruleError.textContent = result.error || "Failed to delete alert rule.";
+            return;
+          }
           if (editingRuleId === Number(button.dataset.delete)) {
             resetRuleForm();
           }

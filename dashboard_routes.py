@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -396,4 +397,3 @@ def handle_post(handler) -> bool:
 
     handler.send_json_response({"error": "Not Found"}, status=404)
     return True
-
