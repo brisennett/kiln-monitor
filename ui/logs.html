@@ -231,25 +231,12 @@
 </head>
 <body>
   <main>
-    <section class="page-nav" aria-label="Pages">
-      <a href="/" class="page-link">Dashboard</a>
-      <a href="/panel" class="page-link">Panel</a>
-      <a href="/logs" class="page-link active-page">Logs</a>
-      <a href="/alerts" class="page-link">Alerts</a>
-      <a href="/events" class="page-link">Events</a>
-      <a href="/faults" class="page-link">Faults</a>
-    </section>
-
-    <section class="page-header">
-      <div>
-        <h1>Firing Logs</h1>
-        <div class="subtle">Create a durable record for each firing with purpose, outcome, post-mortem, linked events, and linked photos.</div>
-      </div>
-      <div class="toolbar">
+    <div data-app-header data-active-page="logs" data-title="Firing Logs" data-subtitle="Create a durable record for each firing with purpose, outcome, post-mortem, linked events, and linked photos.">
+      <template data-header-actions>
         <button type="button" id="refreshLogsButton">Refresh Logs</button>
         <a id="exportMarkdownLink" class="action-link" href="#" hidden>Export Markdown</a>
-      </div>
-    </section>
+      </template>
+    </div>
 
     <section class="layout-grid">
       <section class="card">

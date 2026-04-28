@@ -749,20 +749,13 @@
 </head>
 <body>
   <main>
-    <h1>Kiln Monitor</h1>
-    <section class="page-nav" aria-label="Pages">
-      <a href="/" class="page-link active-page">Dashboard</a>
-      <a href="/panel" class="page-link">Panel</a>
-      <a href="/logs" class="page-link">Firing Logs</a>
-      <a href="/alerts" class="page-link">Alerts</a>
-      <a href="/events" class="page-link">Events</a>
-      <a href="/faults" class="page-link">Faults</a>
-    </section>
-    <section class="toolbar">
-      <button type="button" id="openSetupButton">Dashboard Setup</button>
-      <button type="button" id="resetFaultsButton">Reset Faults</button>
-      <button type="button" id="resetAlertsButton">Reset Alerts</button>
-    </section>
+    <div data-app-header data-active-page="dashboard" data-title="Kiln Monitor" data-subtitle="Live kiln monitoring, profile tracking, alerts, and trend analysis.">
+      <template data-header-actions>
+        <button type="button" id="openSetupButton">Dashboard Setup</button>
+        <button type="button" id="resetFaultsButton">Reset Faults</button>
+        <button type="button" id="resetAlertsButton">Reset Alerts</button>
+      </template>
+    </div>
     <div id="dashboardActionStatus" class="success-text"></div>
     <div id="statusBanner" class="status-banner">Loading...</div>
 

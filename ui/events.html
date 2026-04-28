@@ -183,24 +183,11 @@
 </head>
 <body>
   <main>
-    <section class="page-nav" aria-label="Pages">
-      <a href="/" class="page-link">Dashboard</a>
-      <a href="/panel" class="page-link">Panel</a>
-      <a href="/logs" class="page-link">Logs</a>
-      <a href="/alerts" class="page-link">Alerts</a>
-      <a href="/events" class="page-link active-page">Events</a>
-      <a href="/faults" class="page-link">Faults</a>
-    </section>
-
-    <section class="page-header">
-      <div>
-        <h1>Events</h1>
-        <div class="subtle">Add run markers here and review the full recent event list without crowding the main dashboard.</div>
-      </div>
-      <div class="toolbar">
+    <div data-app-header data-active-page="events" data-title="Events" data-subtitle="Add run markers here and review the full recent event list without crowding the main dashboard.">
+      <template data-header-actions>
         <button type="button" id="refreshEventsButton">Refresh Events</button>
-      </div>
-    </section>
+      </template>
+    </div>
 
     <section class="section-grid">
       <section class="card">

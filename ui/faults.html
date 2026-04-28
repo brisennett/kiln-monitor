@@ -156,28 +156,15 @@
 </head>
 <body>
   <main>
-    <section class="page-nav" aria-label="Pages">
-      <a href="/" class="page-link">Dashboard</a>
-      <a href="/panel" class="page-link">Panel</a>
-      <a href="/logs" class="page-link">Logs</a>
-      <a href="/alerts" class="page-link">Alerts</a>
-      <a href="/events" class="page-link">Events</a>
-      <a href="/faults" class="page-link active-page">Faults</a>
-    </section>
-
-    <section class="page-header">
-      <div>
-        <h1>Faults</h1>
-        <div class="subtle">Review fault rates and recent bad samples here so the main dashboard can stay focused on the live run.</div>
-      </div>
-      <div class="toolbar">
+    <div data-app-header data-active-page="faults" data-title="Faults" data-subtitle="Review fault rates and recent bad samples here so the main dashboard can stay focused on the live run.">
+      <template data-header-actions>
         <div class="range-buttons">
           <button type="button" data-range="1h">1h</button>
           <button type="button" data-range="24h" class="active">24h</button>
           <button type="button" data-range="7d">7d</button>
         </div>
-      </div>
-    </section>
+      </template>
+    </div>
 
     <section class="card">
       <div class="label">Fault Diagnostics</div>

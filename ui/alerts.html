@@ -337,23 +337,11 @@
 </head>
 <body>
   <main>
-    <section class="page-nav" aria-label="Pages">
-      <a href="/" class="page-link">Dashboard</a>
-      <a href="/panel" class="page-link">Panel</a>
-      <a href="/logs" class="page-link">Logs</a>
-      <a href="/alerts" class="page-link active-page">Alerts</a>
-      <a href="/events" class="page-link">Events</a>
-      <a href="/faults" class="page-link">Faults</a>
-    </section>
-    <section class="page-header">
-      <div>
-        <h1>Alerts</h1>
-        <div class="subtle">Keep configuration, delivery checks, and the most recent alert activity in one place.</div>
-      </div>
-      <div class="header-actions">
+    <div data-app-header data-active-page="alerts" data-title="Alerts" data-subtitle="Keep configuration, delivery checks, and the most recent alert activity in one place.">
+      <template data-header-actions>
         <button type="button" id="refreshAlertsPageButton">Refresh Alerts</button>
-      </div>
-    </section>
+      </template>
+    </div>
 
     <section class="section-grid">
       <section class="card">
