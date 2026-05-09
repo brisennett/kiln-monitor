@@ -86,7 +86,7 @@ Use this wiring for the MAX31855 K-type thermocouple board:
 | `GND` | `GND` | n/a | `6` |
 | `CLK` / `SCK` | `SCLK` | `GPIO11` | `23` |
 | `SO` / `SDO` | `MISO` | `GPIO9` | `21` |
-| `CS` | chip select | `GPIO5` | `29` |
+| `CS` | chip select | `GPIO17` | `11` |
 
 Do not connect Pi `MOSI` for MAX31855. That board is read-only over SPI.
 
@@ -94,7 +94,7 @@ Set:
 
 ```bash
 export KILN_MONITOR_SENSOR_MODEL=MAX31855
-export KILN_MONITOR_SPI_CS_PIN=D5
+export KILN_MONITOR_SPI_CS_PIN=D17
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 ```
 
@@ -105,15 +105,15 @@ export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 - `SCK` -> Pi `SCLK`
 - `SDO` -> Pi `MISO`
 - `SDI` -> Pi `MOSI`
-- `CS` -> Pi `GPIO5` by default in this code
+- `CS` -> Pi `GPIO17` by default in this code
 
-If you wire chip select to a different pin, set `KILN_MONITOR_SPI_CS_PIN` to a valid Blinka board pin name such as `D5`, `D6`, or `CE0`.
+If you wire chip select to a different pin, set `KILN_MONITOR_SPI_CS_PIN` to a valid Blinka board pin name such as `D17`, `D5`, `D6`, or `CE0`.
 
 Set:
 
 ```bash
 export KILN_MONITOR_SENSOR_MODEL=MAX31856
-export KILN_MONITOR_SPI_CS_PIN=D5
+export KILN_MONITOR_SPI_CS_PIN=D17
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 ```
 
@@ -130,7 +130,7 @@ Useful runtime overrides:
 ```bash
 export KILN_MONITOR_READ_INTERVAL_SECONDS=2
 export KILN_MONITOR_SENSOR_MODEL=MAX31856
-export KILN_MONITOR_SPI_CS_PIN=D5
+export KILN_MONITOR_SPI_CS_PIN=D17
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 export KILN_MONITOR_MAX_SAMPLE_JUMP_C=50
 export KILN_MONITOR_WATCHDOG_FAULT_STREAK_THRESHOLD=5
@@ -386,7 +386,7 @@ WorkingDirectory=/home/brisennett/kiln-monitor
 Environment=PYTHONUNBUFFERED=1
 Environment=KILN_MONITOR_READ_INTERVAL_SECONDS=2
 Environment=KILN_MONITOR_SENSOR_MODEL=MAX31856
-Environment=KILN_MONITOR_SPI_CS_PIN=D5
+Environment=KILN_MONITOR_SPI_CS_PIN=D17
 Environment=KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 ExecStart=/home/brisennett/kiln-monitor/.venv/bin/python /home/brisennett/kiln-monitor/main.py
 Restart=always

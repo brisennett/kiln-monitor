@@ -47,7 +47,7 @@ THERMOCOUPLE_TYPE = os.getenv("KILN_MONITOR_THERMOCOUPLE_TYPE", "K").upper()
 # Named board pin used for MAX31856 chip select.
 SPI_CS_PIN = os.getenv(
     "KILN_MONITOR_SPI_CS_PIN",
-    os.getenv("KILN_MONITOR_MAX31856_CS_PIN", "D5"),
+    os.getenv("KILN_MONITOR_MAX31856_CS_PIN", "D17"),
 ).upper()
 
 # Backward-compatible alias for older service/env settings.

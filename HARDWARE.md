@@ -46,7 +46,7 @@ Not yet in scope:
 | `GND` | `GND` | n/a | `6` |
 | `CLK` / `SCK` | `SCLK` | `GPIO11` | `23` |
 | `SO` / `SDO` | `MISO` | `GPIO9` | `21` |
-| `CS` | chip select | `GPIO5` | `29` |
+| `CS` | chip select | `GPIO17` | `11` |
 
 MAX31855 does not use Pi `MOSI`.
 
@@ -59,7 +59,7 @@ MAX31856 breakout to Raspberry Pi:
 - `SCK` -> `SCLK`
 - `SDO` -> `MISO`
 - `SDI` -> `MOSI`
-- `CS` -> `GPIO5` by default
+- `CS` -> `GPIO17` by default
 
 Thermocouple side:
 
