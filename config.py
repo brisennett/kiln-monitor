@@ -37,9 +37,9 @@ WATCHDOG_FAULT_STREAK_THRESHOLD = int(os.getenv("KILN_MONITOR_WATCHDOG_FAULT_STR
 WATCHDOG_STALE_DATA_SECONDS = float(os.getenv("KILN_MONITOR_WATCHDOG_STALE_DATA_SECONDS", "30"))
 WATCHDOG_NOTIFY_COOLDOWN_MINUTES = float(os.getenv("KILN_MONITOR_WATCHDOG_NOTIFY_COOLDOWN_MINUTES", "30"))
 
-# Sensor front-end model. Use MAX31855 for the replacement board or MAX31856
-# for the original thermocouple amplifier board.
-SENSOR_MODEL = os.getenv("KILN_MONITOR_SENSOR_MODEL", "MAX31855").upper()
+# Sensor front-end model. Use MAX31856 for the current thermocouple amplifier
+# board or MAX31855 if you temporarily swap back.
+SENSOR_MODEL = os.getenv("KILN_MONITOR_SENSOR_MODEL", "MAX31856").upper()
 
 # Thermocouple configuration.
 THERMOCOUPLE_TYPE = os.getenv("KILN_MONITOR_THERMOCOUPLE_TYPE", "K").upper()

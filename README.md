@@ -109,6 +109,14 @@ export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 
 If you wire chip select to a different pin, set `KILN_MONITOR_SPI_CS_PIN` to a valid Blinka board pin name such as `D5`, `D6`, or `CE0`.
 
+Set:
+
+```bash
+export KILN_MONITOR_SENSOR_MODEL=MAX31856
+export KILN_MONITOR_SPI_CS_PIN=D5
+export KILN_MONITOR_THERMOCOUPLE_TYPE=K
+```
+
 ## Running
 
 ```bash
@@ -121,7 +129,7 @@ Useful runtime overrides:
 
 ```bash
 export KILN_MONITOR_READ_INTERVAL_SECONDS=2
-export KILN_MONITOR_SENSOR_MODEL=MAX31855
+export KILN_MONITOR_SENSOR_MODEL=MAX31856
 export KILN_MONITOR_SPI_CS_PIN=D5
 export KILN_MONITOR_THERMOCOUPLE_TYPE=K
 export KILN_MONITOR_MAX_SAMPLE_JUMP_C=50
@@ -360,7 +368,7 @@ Archive files are written to `data/archive/` as `CSV.gz`.
 
 ## Running As A Service
 
-Verified on Pi host `kiln-spy` with the MAX31855 board: the service starts at boot, logs live samples, and survives a reboot.
+Verified on Pi host `kiln-spy`: the service starts at boot, logs live samples, and survives a reboot.
 
 ### Logger Service
 
@@ -377,7 +385,7 @@ User=brisennett
 WorkingDirectory=/home/brisennett/kiln-monitor
 Environment=PYTHONUNBUFFERED=1
 Environment=KILN_MONITOR_READ_INTERVAL_SECONDS=2
-Environment=KILN_MONITOR_SENSOR_MODEL=MAX31855
+Environment=KILN_MONITOR_SENSOR_MODEL=MAX31856
 Environment=KILN_MONITOR_SPI_CS_PIN=D5
 Environment=KILN_MONITOR_SQLITE_SYNCHRONOUS_MODE=FULL
 ExecStart=/home/brisennett/kiln-monitor/.venv/bin/python /home/brisennett/kiln-monitor/main.py
