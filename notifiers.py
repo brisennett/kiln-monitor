@@ -29,6 +29,7 @@ from config import (
     ALERT_TWILIO_ACCOUNT_SID,
     ALERT_TWILIO_AUTH_TOKEN,
     ALERT_TWILIO_FROM,
+    CAMERA_SNAPSHOTS_DIR,
     DATABASE_PATH,
 )
 
@@ -155,6 +156,19 @@ def channels_for_rule(rule: AlertRule) -> list[str]:
     return channels
 
 
+def _snapshot_path(snapshot_filename: str | None):
+    if not snapshot_filename:
+        return None
+    if snapshot_filename != parse.unquote(snapshot_filename):
+        return None
+    if "/" in snapshot_filename or "\\" in snapshot_filename:
+        return None
+    snapshot_path = CAMERA_SNAPSHOTS_DIR / snapshot_filename
+    if not snapshot_path.exists() or not snapshot_path.is_file():
+        return None
+    return snapshot_path
+
+
 class EmailNotifier:
     channel_name = "EMAIL"
 
@@ -185,9 +199,18 @@ class EmailNotifier:
                     f"Kind: {alert.kind}",
                     f"Time UTC: {alert.timestamp_utc}",
                     f"Detail: {alert.detail}",
+                    f"Snapshot: {alert.snapshot_filename or 'not captured'}",
                 ]
             )
         )
+        snapshot_path = _snapshot_path(alert.snapshot_filename)
+        if snapshot_path is not None:
+            message.add_attachment(
+                snapshot_path.read_bytes(),
+                maintype="image",
+                subtype="jpeg",
+                filename=snapshot_path.name,
+            )
 
         try:
             with smtplib.SMTP(self.settings["smtp_host"], int(self.settings["smtp_port"]), timeout=10) as smtp:
@@ -199,7 +222,12 @@ class EmailNotifier:
         except Exception as exc:
             raise NotificationError(f"email delivery failed: {exc}") from exc
 
-        return DeliveryResult(channel=self.channel_name, success=True, detail=f"sent to {self.settings['to_addr']}")
+        attachment_detail = " with snapshot" if snapshot_path is not None else ""
+        return DeliveryResult(
+            channel=self.channel_name,
+            success=True,
+            detail=f"sent to {self.settings['to_addr']}{attachment_detail}",
+        )
 
 
 class TwilioSmsNotifier:

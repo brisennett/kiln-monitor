@@ -251,7 +251,7 @@ Defaults:
 ```bash
 export KILN_MONITOR_CAMERA_WIDTH=1280
 export KILN_MONITOR_CAMERA_HEIGHT=960
-export KILN_MONITOR_CAMERA_ROTATION=0
+export KILN_MONITOR_CAMERA_ROTATION=180
 export KILN_MONITOR_CAMERA_CAPTURE_TIMEOUT_SECONDS=15
 ```
 
@@ -267,7 +267,7 @@ The dashboard serves the latest image from:
 /camera/latest.jpg
 ```
 
-Trigger alerts can also capture and archive a local snapshot automatically. This is enabled by default and skips clear/test alerts.
+Trigger alerts can also capture and archive a local snapshot automatically. This is enabled by default and skips clear/test alerts. Email alerts attach the captured snapshot when one is available.
 
 ```bash
 export KILN_MONITOR_ALERT_SNAPSHOTS_ENABLED=true

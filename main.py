@@ -264,6 +264,7 @@ def deliver_watchdog_alerts(storage: SQLiteLogger, alerts, logger, cooldown_minu
 def emit_watchdog_alerts(storage: SQLiteLogger, alerts, logger, cooldown_minutes: float) -> None:
     if not alerts:
         return
+    attach_alert_snapshots(alerts, logger)
     persist_alerts(storage, alerts, logger)
     deliver_watchdog_alerts(storage, alerts, logger, cooldown_minutes)
     for alert in alerts:
