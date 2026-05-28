@@ -1361,6 +1361,24 @@
       return converted === null ? "--" : `${converted.toFixed(1)} ${unitSuffix()}`;
     }
 
+    function formatTemperatureRate(tempFPerHour, tempCPerHour) {
+      if (
+        tempFPerHour === null
+        || tempCPerHour === null
+        || tempFPerHour === undefined
+        || tempCPerHour === undefined
+      ) {
+        return "--";
+      }
+      if (selectedUnit === "C") {
+        return `${tempCPerHour.toFixed(1)} C/hr`;
+      }
+      if (selectedUnit === "BOTH") {
+        return `${tempFPerHour.toFixed(1)} F/hr / ${tempCPerHour.toFixed(1)} C/hr`;
+      }
+      return `${tempFPerHour.toFixed(1)} F/hr`;
+    }
+
     function convertRuleInputToStoredF(value) {
       const numericValue = Number(value);
       if (!Number.isFinite(numericValue)) {
@@ -1547,6 +1565,17 @@
       const detailText = (diagnostics.top_fault_details || []).length
         ? diagnostics.top_fault_details.map((item) => `${item.detail} (${item.count})`).join(", ")
         : "none";
+      const firstFault = diagnostics.first_fault || null;
+      const firstFaultTemp = firstFault
+        ? formatPrimaryTemperature(firstFault.temp_f, firstFault.temp_c)
+        : "--";
+      const firstFaultText = firstFault
+        ? `${firstFaultTemp} at ${formatTimestamp(firstFault.timestamp_utc)}`
+        : "none";
+      const rampRate = diagnostics.ramp_rate || null;
+      const rampRateText = rampRate
+        ? formatTemperatureRate(rampRate.temp_f_per_hour, rampRate.temp_c_per_hour)
+        : "--";
       diagnosticsGrid.innerHTML = `
         <div class="diagnostic-card">
           <div class="label">Fault Samples</div>
@@ -1563,6 +1592,14 @@
         <div class="diagnostic-card">
           <div class="label">Current Streak</div>
           <div class="value">${Number(diagnostics.current_fault_streak || 0)} samples</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Ramp Rate</div>
+          <div class="value">${rampRateText}</div>
+        </div>
+        <div class="diagnostic-card">
+          <div class="label">Fault Onset</div>
+          <div class="value">${firstFaultText}</div>
         </div>
         <div class="diagnostic-card">
           <div class="label">Top Faults</div>

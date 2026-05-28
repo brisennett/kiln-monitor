@@ -14,6 +14,7 @@ def fetch_dashboard_status() -> dict:
             "latest_alert": None,
             "active_alert_rule": None,
             "active_profile_run": None,
+            "recent_ramp_rate": None,
         }
 
     try:
@@ -51,6 +52,11 @@ def fetch_dashboard_status() -> dict:
                 LIMIT 1
                 """
             , (alert_acknowledged_at, alert_acknowledged_at)).fetchone()
+        recent_diagnostics = build_fault_diagnostics(
+            connection,
+            (datetime.now(timezone.utc) - HISTORY_WINDOWS["1h"]).isoformat(),
+        )
+        recent_ramp_rate = recent_diagnostics.get("ramp_rate")
         active_alert_rule = None
         active_profile_run = fetch_active_profile_run(connection)
         if table_exists(connection, "alert_rules"):
@@ -88,6 +94,7 @@ def fetch_dashboard_status() -> dict:
         "latest_alert": row_to_payload(latest_alert),
         "active_alert_rule": active_alert_rule,
         "active_profile_run": active_profile_run,
+        "recent_ramp_rate": recent_ramp_rate,
     }
 
 def fetch_dashboard_preferences() -> dict:

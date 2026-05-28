@@ -391,6 +391,11 @@
         <div class="detail" id="profileMeta">Start tracking a firing profile to show segment and elapsed time here.</div>
       </section>
       <section class="panel stat-card">
+        <div class="label">Ramp Rate</div>
+        <div class="value" id="rampRateValue">--</div>
+        <div class="detail" id="rampRateMeta">Last 1h</div>
+      </section>
+      <section class="panel stat-card">
         <div class="label">Segment</div>
         <div class="value" id="segmentName">--</div>
         <div class="detail" id="segmentMeta">Expected temp and elapsed time will appear during a run.</div>
@@ -408,6 +413,8 @@
     const healthText = document.getElementById("healthText");
     const profileName = document.getElementById("profileName");
     const profileMeta = document.getElementById("profileMeta");
+    const rampRateValue = document.getElementById("rampRateValue");
+    const rampRateMeta = document.getElementById("rampRateMeta");
     const segmentName = document.getElementById("segmentName");
     const segmentMeta = document.getElementById("segmentMeta");
     const riskCard = document.getElementById("riskCard");
@@ -446,6 +453,11 @@
     function formatTempSecondary(tempC) {
       if (tempC === null || tempC === undefined || Number.isNaN(Number(tempC))) return "";
       return `${Number(tempC).toFixed(1)}°C`;
+    }
+
+    function formatTemperatureRate(tempFPerHour) {
+      if (tempFPerHour === null || tempFPerHour === undefined || Number.isNaN(Number(tempFPerHour))) return "--";
+      return `${Math.round(Number(tempFPerHour))}°F/hr`;
     }
 
     function setHealth(state, text) {
@@ -504,6 +516,10 @@
         : "Waiting for data";
       lastUpdateText.textContent = `Last update: ${latestSample ? formatTimestamp(latestSample.timestamp_utc) : "--"}`;
       sampleAgeText.textContent = `Age: ${latestSample ? (latestSample.sample_age || "--") : "--"}`;
+      rampRateValue.textContent = formatTemperatureRate(status.recent_ramp_rate?.temp_f_per_hour);
+      rampRateMeta.textContent = status.recent_ramp_rate
+        ? `Last 1h • ${formatElapsed(Number(status.recent_ramp_rate.elapsed_hours || 0) * 3600)} span`
+        : "Last 1h";
 
       if (!latestSample || ageSeconds === null) {
         setHealth("danger", "No live data");

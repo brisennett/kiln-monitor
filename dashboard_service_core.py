@@ -426,8 +426,91 @@ def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str, end_utc
         detail_params,
     ).fetchall()
 
+    first_fault_fields = "timestamp_utc, detail, temp_c, temp_f"
+    has_previous_good_temp = (
+        table_has_column(connection, "temperature_log", "previous_good_temp_c")
+        and table_has_column(connection, "temperature_log", "previous_good_temp_f")
+    )
+    if has_previous_good_temp:
+        first_fault_fields += ", previous_good_temp_c, previous_good_temp_f"
+    first_fault = connection.execute(
+        f"""
+        SELECT {first_fault_fields}
+        FROM temperature_log
+        WHERE timestamp_utc >= ?
+          {end_clause}
+          AND status = 'ERROR'
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        detail_params,
+    ).fetchone()
+
+    first_good_for_ramp = connection.execute(
+        f"""
+        SELECT timestamp_utc, temp_c, temp_f
+        FROM temperature_log
+        WHERE timestamp_utc >= ?
+          {end_clause}
+          AND status = 'OK'
+          AND temp_c IS NOT NULL
+          AND temp_f IS NOT NULL
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        detail_params,
+    ).fetchone()
+    latest_good_for_ramp = connection.execute(
+        f"""
+        SELECT timestamp_utc, temp_c, temp_f
+        FROM temperature_log
+        WHERE timestamp_utc >= ?
+          {end_clause}
+          AND status = 'OK'
+          AND temp_c IS NOT NULL
+          AND temp_f IS NOT NULL
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        detail_params,
+    ).fetchone()
+
     total_samples = int(totals["total_samples"] or 0)
     fault_samples = int(totals["fault_samples"] or 0)
+    first_fault_temp_c = None
+    first_fault_temp_f = None
+    first_fault_payload = None
+    if first_fault is not None:
+        first_fault_temp_c = first_fault["temp_c"]
+        first_fault_temp_f = first_fault["temp_f"]
+        if has_previous_good_temp and first_fault_temp_f is None:
+            first_fault_temp_c = first_fault["previous_good_temp_c"]
+            first_fault_temp_f = first_fault["previous_good_temp_f"]
+        first_fault_payload = {
+            "timestamp_utc": first_fault["timestamp_utc"],
+            "detail": first_fault["detail"] or "fault",
+            "temp_c": first_fault_temp_c,
+            "temp_f": first_fault_temp_f,
+        }
+
+    ramp_rate_payload = None
+    if first_good_for_ramp is not None and latest_good_for_ramp is not None:
+        first_time = datetime.fromisoformat(first_good_for_ramp["timestamp_utc"].replace("Z", "+00:00"))
+        latest_time = datetime.fromisoformat(latest_good_for_ramp["timestamp_utc"].replace("Z", "+00:00"))
+        elapsed_hours = (latest_time - first_time).total_seconds() / 3600.0
+        if elapsed_hours > 0:
+            ramp_rate_payload = {
+                "temp_c_per_hour": (
+                    latest_good_for_ramp["temp_c"] - first_good_for_ramp["temp_c"]
+                ) / elapsed_hours,
+                "temp_f_per_hour": (
+                    latest_good_for_ramp["temp_f"] - first_good_for_ramp["temp_f"]
+                ) / elapsed_hours,
+                "start_timestamp_utc": first_good_for_ramp["timestamp_utc"],
+                "end_timestamp_utc": latest_good_for_ramp["timestamp_utc"],
+                "elapsed_hours": elapsed_hours,
+            }
+
     return {
         "total_samples": total_samples,
         "fault_samples": fault_samples,
@@ -435,6 +518,8 @@ def build_fault_diagnostics(connection: sqlite3.Connection, cutoff: str, end_utc
         "fault_rate_percent": (fault_samples / total_samples * 100.0) if total_samples else 0.0,
         "longest_fault_streak": longest_fault_streak,
         "current_fault_streak": current_fault_streak,
+        "first_fault": first_fault_payload,
+        "ramp_rate": ramp_rate_payload,
         "top_fault_details": [
             {"detail": row["detail"] or "fault", "count": int(row["count"])}
             for row in detail_rows
@@ -484,4 +569,3 @@ def alert_rule_row_to_payload(row: sqlite3.Row) -> dict:
         "notify_push": bool(row["notify_push"]) if "notify_push" in row.keys() else False,
     }
     return payload
-
